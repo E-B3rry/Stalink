@@ -1,0 +1,49 @@
+function hasTurtleInvHasEmptySlots()
+  for i = 1,16 do
+    if turtle.getItemCount(i) == 0 then
+      return true
+    end
+  end
+  return false
+end
+
+function refuelTurtle(specificSlot, amount)
+  local count = 0
+
+  if specificSlot then
+    turtle.select(specificSlot)
+
+    for i = 1, amount do
+      if turtle.refuel(1) then return false, count, "notEnough" end
+      count = count + 1
+    end
+
+    return true
+
+  else
+    local i = 0
+    local item = ""
+
+    for j = 1, 16 do
+      turtle.select(j)
+      item = (turtle.getItemDetail() and turtle.getItemDetail()["name"] or "")
+
+      if item == "minecraft:coal" or item == "minecraft:charcoal" or item == "minecraft:coal_block" then
+        if amount then
+          while i < amount do
+            if not turtle.refuel(1) and j == 16 then return false, count, "notEnough" end
+            count = count + 1
+          end
+        else
+          while true do
+            if not turtle.refuel(1) then break end
+            count = count + 1
+          end
+        end
+      end
+    end
+
+    if not count then return false, count, "notEnough" end
+    return true, count
+  end
+end
