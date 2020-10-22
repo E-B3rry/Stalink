@@ -7,11 +7,11 @@ redComSides = {
   ["back"] = {}
 }
 
-function isOpen(port, sides)
-  if type(port) != "number" then
-    error("Port argument must be a number.", 2)
-  elseif port < 1 or port > 65535 then
-    error("Port out of range [1 - 65535], got " .. port .. ".", 2)
+function isOpen(channel, sides)
+  if type(channel) != "number" then
+    error("Channel argument must be a number.", 2)
+  elseif channel < 1 or channel > 65535 then
+    error("Channel out of range [1 - 65535], got " .. channel .. ".", 2)
   end
 
   if type(sides) == "string" then
@@ -21,11 +21,9 @@ function isOpen(port, sides)
   end
 
   for side in sides do
-    for side in redComSides do
-      for openedPort in side do
-        if port == openedPort then
-          return true
-        end
+    for openedChannel in redComSides[side] do
+      if channel == openedChannel then
+        return true
       end
     end
   end
@@ -34,9 +32,9 @@ function isOpen(port, sides)
 end
 
 function getOpenableModemSide()
-  for side, ports in ipairs(redComSides) do
+  for side, channels in ipairs(redComSides) do
     if peripheral.getType(side) == "modem" then
-      if #ports < 128 then
+      if #channels < 128 then
         return side
       end
     end
@@ -45,7 +43,7 @@ function getOpenableModemSide()
   return nil
 end
 
-function open(ports, side)
+function open(channels, side)
   local notSpecifiedSide = false
 
   if side then
@@ -68,12 +66,12 @@ function open(ports, side)
     end
   end
 
-  if type(ports) == "number" then
-    peripheral.call(side, "open", ports)
-    redComSides[side].insert(ports)
-  elseif type(ports) == "table" then
-    for port in ports do
-      if isOpen(port) then
+  if type(channels) == "number" then
+    peripheral.call(side, "open", channels)
+    redComSides[side].insert(channels)
+  elseif type(channels) == "table" then
+    for channel in channels do
+      if isOpen(channel) then
         goto open_function_continue_statment
       end
 
@@ -82,20 +80,20 @@ function open(ports, side)
           side = getOpenableModemSide()
 
           if not side then
-            error("Couldn't open all ports because there aren't any modem connected to the computer that can open channel anymore. (All the modems have 128 channels in use)", 2)
+            error("Couldn't open all channels because there aren't any modems connected to the computer that can open channel anymore. (All the modems have 128 channels in use)", 2)
           end
         else
-          error("Couldn't open all ports because " .. side .. " modem cannot open another channel (128 already in use).", 2)
+          error("Couldn't open all channels because " .. side .. " modem cannot open another channel (128 already in use).", 2)
         end
       end
 
-      peripheral.call(side, "open", port)
-      redComSides[side].insert(port)
+      peripheral.call(side, "open", channel)
+      redComSides[side].insert(channel)
 
       ::open_function_continue_statment::
     end
   else
-    error("Expected number or table of numbers", 2)
+    error("Expected number or table of numbers for channels argument.", 2)
   end
 
   return true

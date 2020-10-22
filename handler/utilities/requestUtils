@@ -1,0 +1,53 @@
+-- Load APIs and set constants --
+local mainPath = fs.open("/mainPath.dat", "r")
+os.unloadAPI("rednet")
+os.loadAPI(mainPath.readLine() .. "redCom/redCom")
+--os.loadAPI(mainPath.readLine() .. "turtle/utilities/quarry_mining/quarryMining")
+fs.close(mainPath)
+
+TURTLE_BROADCAST_PORT = 65135
+COMPUTER_BROADCAST_PORT = 65136
+RELAY_BROADCAST_PORT = 65137
+
+-- Initialization function --
+function Init()
+  redCom.open({65135, 65136, 65137})
+
+
+end
+
+-- Request system --
+
+connections = {}
+stalinedVariables = {}
+
+function run()
+
+end
+
+function receive()
+  r = redCom.receive()
+
+  if not r then
+    returnValue = nil
+  else
+
+  end
+
+end
+
+function set_stalined_variable(var, value)
+  if not type(var) == "string" then
+    error("The var argument must be a string.", 2)
+  end
+
+  stalinedVariables[var] = value
+end
+
+function remove_stalined_variable(var)
+  if not type(var) == "string" then
+    error("The var argument must be a string.", 2)
+  end
+
+  stalinedVariables[var] = nil
+end

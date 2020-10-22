@@ -5,15 +5,29 @@ mainPathHandle.close()
 os.loadAPI(mainPath .. "turtle/utilities/inv/inventory")
 os.loadAPI(mainPath .. "turtle/quarry_mining/quarryMining")
 
-quarryObj = quarryMining.createQuarry(
-  true,
-  {["x"] = 10, ["y"] = 50, ["z"] = 10},
-  {["x"] = 0, ["y"] = 0, ["z"] = -1},
-  true,
-  1,
-  nil
-)
+function RunQuarry(quarryObj)
+  if not quarryObj then
+    return false
+  end
 
-while (quarryObj["status"] ~= "success") do
-  quarryObj = quarryMining.run(quarryObj)
+  while (quarryObj["status"] ~= "success") do
+    quarryObj = quarryMining.run(quarryObj)
+  end
+
+  return true
 end
+
+
+
+--quarryObj = quarryMining.createQuarry(
+--  true,
+--  {["x"] = 10, ["y"] = 50, ["z"] = 10},
+--  {["x"] = 0, ["y"] = 0, ["z"] = -1},
+--  true,
+--  1,
+--  nil
+--)
+
+--while (quarryObj["status"] ~= "success") do
+--  quarryObj = quarryMining.run(quarryObj)
+--end

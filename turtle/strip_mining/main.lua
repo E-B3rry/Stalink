@@ -1,6 +1,7 @@
 local mainPath = fs.open("/mainPath.dat", "r")
 mPath = mainPath.readLine() .. "turtle/utilities/mining/pathSystem"
 os.loadAPI(mPath)
+fs.close(mainPath)
 
 local pathObj = pathSystem.PathInit()
 
