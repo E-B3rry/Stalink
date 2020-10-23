@@ -1,24 +1,19 @@
 -- Load APIs and set constants --
 local mainPath = fs.open("/mainPath.dat", "r")
-os.unloadAPI("rednet")
 os.loadAPI(mainPath.readLine() .. "redCom/redCom")
---os.loadAPI(mainPath.readLine() .. "turtle/utilities/quarry_mining/quarryMining")
 fs.close(mainPath)
 
-TURTLE_BROADCAST_PORT = 65135
-COMPUTER_BROADCAST_PORT = 65136
-RELAY_BROADCAST_PORT = 65137
+MEETING_CHANNEL = 65135
 
 -- Initialization function --
 function Init()
-  redCom.open({65135, 65136, 65137})
+  redCom.openMeetingChannel(MEETING_CHANNEL)
 
 
 end
 
 -- Request system --
 
-connections = {}
 stalinedVariables = {}
 
 function run()

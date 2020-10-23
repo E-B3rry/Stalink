@@ -1,3 +1,14 @@
+-- Load APIs and set constants --
+os.unloadAPI("rednet")
+
+
+-- Set local variables
+local meetingChannel = 0
+local meetingPrivateKey = nil
+
+local connections = {}
+local isAcceptingConnection = false
+
 redComSides = {
   ["left"] = {},
   ["right"] = {},
@@ -6,6 +17,29 @@ redComSides = {
   ["front"] = {},
   ["back"] = {}
 }
+
+
+-- Define functions
+function receive()
+  -- Pulling event from os queue (Using a specific blobby technic so that os.pullEvent doesn't block the program :sunglasses:)
+  local e, s, channel, replyChannel, msg, distance = parallel.waitForAny(os.pullEvent("modem_message"), function() return nil end)
+
+  --
+  if (not e) or (not isOpen(channel, s)) then
+    return e
+  end
+
+  if isAcceptingConnection then
+    if channel == meetingChannel then
+      if meetingPrivateKey then
+        if isAcceptingConnection
+
+        end
+      end
+    end
+  end
+
+end
 
 function isOpen(channel, sides)
   if type(channel) != "number" then
@@ -97,4 +131,19 @@ function open(channels, side)
   end
 
   return true
+end
+
+function openMeetingChannel(channel, privateKey)
+  if isOpen(meetingChannel) then
+    close(meetingChannel)
+
+  if privateKey then
+    meetingPrivateKey = tostring(privateKey)
+  else
+    meetingPrivateKey = nil
+  end
+
+  open(channel)
+  meetingChannel = channel
+  isAcceptingConnection = true
 end

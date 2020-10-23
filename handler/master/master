@@ -3,6 +3,7 @@ local mainPath = fs.open("/mainPath.dat", "r")
 
 os.loadAPI(mainPath.readLine() .. "turtle/utilities/mining/pathSystem")
 os.loadAPI(mainPath.readLine() .. "turtle/utilities/quarry_mining/quarryMining")
+os.loadAPI(mainPath.readLine() .. "handler/utilities/requestUtils")
 
 fs.close(mainPath)
 
@@ -24,19 +25,20 @@ end
 -- Request System --
 
     --{id,msg (ex : QzrF0100 or SzrE1720 or QcrF0950 or QfrE0211)}
-    --msg encryryption first char = first letter of the job in MAJ. thene zr = zone request // cr = chest request // fr = fuel request
+    --msg encryption// first char = first letter of the job in MAJ. thene zr = zone request // cr = chest request // fr = fuel request
     --E = empty inventory / F = full and M = space left in the inventory
     --Fuel level in 4 digits
 
     --Return code : {x,y,z(nil if no need), command}
 function Ask(RequestObj)
-  objID = RequestObj[0]
+  objID = RequestObj[1]
 
   --start unzip
-  objJob = RequestObj[1][0]
-  objRequest = RequestObj[1][1]..RequestObj[1][2]
-  objInventory = RequestObj[1][3]
-  objFuelLevel = tonumber(RequestObj[1][4]..RequestObj[1][5]..RequestObj[1][6]..RequestObj[1][7]) or 0
+  Zip = RequestObj[2]
+  objJob = Zip[1]
+  objRequest = Zip[2]..Zip[3]
+  objInventory = Zip[4]
+  objFuelLevel = tonumber(Zip[5]..Zip[6]..Zip[7]..Zip[8]) or 0
 
   --start Analysing
   if objJob == "Q" then

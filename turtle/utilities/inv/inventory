@@ -1,3 +1,5 @@
+local mainPath = fs.open("/mainPath.dat", "r")
+
 function hasTurtleInvHasEmptySlots()
   for i = 1,16 do
     if turtle.getItemCount(i) == 0 then
@@ -46,4 +48,8 @@ function refuelTurtle(specificSlot, amount)
     if not count then return false, count, "notEnough" end
     return true, count
   end
+end
+
+function emptyTurtle()
+  acceptationCode = Ask()
 end
