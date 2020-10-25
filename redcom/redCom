@@ -18,31 +18,51 @@ redComSides = {
   ["back"] = {}
 }
 
-
 -- Define functions
 function receive()
-  -- Pulling event from os queue (Using a specific blobby technic so that os.pullEvent doesn't block the program :sunglasses:)
-  local e, s, channel, replyChannel, msg, distance = parallel.waitForAny(os.pullEvent("modem_message"), function() return nil end)
+  -- Pulling event from os queue (Using a specific way so that os.pullEvent doesn't block the program)
+  timer = os.startTimer(0.05)
+  local e, s, channel, replyChannel, msg, distance = os.pullEvent()
 
   --
-  if (not e) or (not isOpen(channel, s)) then
-    return e
+  if e ~= "modem_message" and e ~= "timer" then
+    -- Take actions to put back this damn event in the queue
+    return nil
+  elseif e == "timer" and s == timer then
+    return nil
+  elseif not isOpen(channel, s) then
+    return nil
   end
 
   if isAcceptingConnection then
     if channel == meetingChannel then
-      if meetingPrivateKey then
-        if isAcceptingConnection
-
-        end
+      if not meetingPrivateKey then
+        return "new_connection", channel, msg
       end
     end
   end
 
+  return channel, msg, distance
+end
+
+function send(channel, msg, side)
+  if side then
+    if not isOpen(channel, side) then
+      error("Channel " .. channel .. " not opened on side " .. side .. ".", 2)
+    end
+  else
+    side = isOpen(channel)
+
+    if not side then
+      error("Channel " .. channel .. " not openend on any sides.", 2)
+    end
+  end
+
+  peripheral.call(side, "transmit", channel, 0, msg)
 end
 
 function isOpen(channel, sides)
-  if type(channel) != "number" then
+  if type(channel) ~= "number" then
     error("Channel argument must be a number.", 2)
   elseif channel < 1 or channel > 65535 then
     error("Channel out of range [1 - 65535], got " .. channel .. ".", 2)
@@ -54,10 +74,12 @@ function isOpen(channel, sides)
     sides = {"left", "right", "up", "down", "front", "back"}
   end
 
-  for side in sides do
-    for openedChannel in redComSides[side] do
-      if channel == openedChannel then
-        return true
+  for i = 0, #sides do
+    if redComSides[sides[i]] then
+      for k, openedChannel in pairs(redComSides[sides[i]]) do
+        if channel == openedChannel then
+          return sides[i]
+        end
       end
     end
   end
@@ -66,15 +88,23 @@ function isOpen(channel, sides)
 end
 
 function getOpenableModemSide()
-  for side, channels in ipairs(redComSides) do
-    if peripheral.getType(side) == "modem" then
-      if #channels < 128 then
-        return side
-      end
+  for side, channels in pairs(redComSides) do
+    if isSideOpenable(side) then
+      return side
     end
   end
 
-  return nil
+  return false
+end
+
+function isSideOpenable(side)
+  if peripheral.getType(side) == "modem" then
+    if #(redComSides[side]) < 128 then
+      return true
+    end
+  end
+
+  return false
 end
 
 function open(channels, side)
@@ -84,7 +114,7 @@ function open(channels, side)
     local t = peripheral.getType(side)
     if t == nil then
       error("No peripheral detected on side " .. side .. ".", 2)
-    elseif t ~= "modem"
+    elseif t ~= "modem" then
       error("The peripheral connected to side " .. side .. " is not a modem.", 2)
     end
 
@@ -102,29 +132,12 @@ function open(channels, side)
 
   if type(channels) == "number" then
     peripheral.call(side, "open", channels)
-    redComSides[side].insert(channels)
+    table.insert(redComSides[side], channels)
   elseif type(channels) == "table" then
     for channel in channels do
-      if isOpen(channel) then
-        goto open_function_continue_statment
+      if not isOpen(channel) then
+        __InternalFunction_Open__(channel, side)
       end
-
-      if #(redComSides[side]) > 127 then
-        if notSpecifiedSide then
-          side = getOpenableModemSide()
-
-          if not side then
-            error("Couldn't open all channels because there aren't any modems connected to the computer that can open channel anymore. (All the modems have 128 channels in use)", 2)
-          end
-        else
-          error("Couldn't open all channels because " .. side .. " modem cannot open another channel (128 already in use).", 2)
-        end
-      end
-
-      peripheral.call(side, "open", channel)
-      redComSides[side].insert(channel)
-
-      ::open_function_continue_statment::
     end
   else
     error("Expected number or table of numbers for channels argument.", 2)
@@ -133,9 +146,27 @@ function open(channels, side)
   return true
 end
 
+function __InternalFunction_Open__(channel, side)
+  if #(redComSides[side]) > 127 then
+    if notSpecifiedSide then
+      side = getOpenableModemSide()
+
+      if not side then
+        error("Couldn't open all channels because there aren't any modems connected to the computer that can open channel anymore. (All the modems have 128 channels in use)", 3)
+      end
+    else
+      error("Couldn't open all channels because " .. side .. " modem cannot open another channel (128 already in use).", 3)
+    end
+  end
+
+  peripheral.call(side, "open", channel)
+  redComSides[side].insert(channel)
+end
+
 function openMeetingChannel(channel, privateKey)
   if isOpen(meetingChannel) then
     close(meetingChannel)
+  end
 
   if privateKey then
     meetingPrivateKey = tostring(privateKey)

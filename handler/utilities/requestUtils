@@ -16,10 +16,6 @@ end
 
 stalinedVariables = {}
 
-function run()
-
-end
-
 function receive()
   r = redCom.receive()
 

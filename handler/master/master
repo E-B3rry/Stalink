@@ -11,15 +11,8 @@ fs.close(mainPath)
 getmetatable('').__index = function(str,i) return string.sub(str,i,i) end
 -- Master Stalin --
 
-Already
 
 --Variable System (by Jules)--
-
-function setVar()
-end
-
-function delVar()
-end
 
 
 -- Request System --
