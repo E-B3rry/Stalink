@@ -1,7 +1,7 @@
 --- =======================
 --- Path Interpreter Class
 --- =======================
-
+print("Path System Loaded")
 -- Declaration as a Class
 
 function PathInit()

@@ -1,7 +1,6 @@
 -- Load APIs and set constants --
 os.unloadAPI("rednet")
 
-
 -- Set local variables
 local meetingChannel = 0
 local meetingPrivateKey = nil
@@ -18,47 +17,67 @@ redComSides = {
   ["back"] = {}
 }
 
+
 -- Define functions
-function receive()
+
+-- Raw receive function
+function receiveRaw()
   -- Pulling event from os queue (Using a specific way so that os.pullEvent doesn't block the program)
-  timer = os.startTimer(0.05)
-  local e, s, channel, replyChannel, msg, distance = os.pullEvent()
+  local timer = os.startTimer(0.15)
+  local eventTable = table.pack(os.pullEvent())
 
-  --
-  if e ~= "modem_message" and e ~= "timer" then
-    -- Take actions to put back this damn event in the queue
-    return nil
-  elseif e == "timer" and s == timer then
-    return nil
-  elseif not isOpen(channel, s) then
+  -- Verify that the event is related to receive() function
+  if eventTable[1] ~= "modem_message" and eventTable[2] ~= timer then
+    -- Take actions to put back the wrong event back in queue
+    os.cancelTimer(timer)
+    os.queueEvent(table.unpack(eventTable))
     return nil
   end
 
-  if isAcceptingConnection then
-    if channel == meetingChannel then
-      if not meetingPrivateKey then
-        return "new_connection", channel, msg
-      end
-    end
+  if eventTable[1] == "timer" and eventTable[2] == timer then
+    -- If the timer event is triggered, return nil
+    return nil
   end
 
-  return channel, msg, distance
+  -- Unpack all the arguments and work with them
+  local e, s, channel, replyChannel, msg, distance = table.unpack(eventTable)
+
+  for key, item in pairs(msg) do
+    print(tostring(key) .. " - " .. tostring(item))
+  end
+
+  -- If the receiving channel is not registered as opened on the receiving side then ignore
+  if not isOpen(channel, s) then
+    print("Blobby")
+    return nil
+  end
+
+  -- -- TCP like protocol handler
+  -- if isAcceptingConnection then
+  --   if channel == meetingChannel then
+  --     if not meetingPrivateKey then
+  --       return "new_connection", channel, msg
+  --     end
+  --   end
+  -- end
+
+  -- Simply returning the message
+  print("Blobby 4")
+  return channel, replyChannel, msg, distance
 end
 
-function send(channel, msg, side)
-  if side then
-    if not isOpen(channel, side) then
-      error("Channel " .. channel .. " not opened on side " .. side .. ".", 2)
-    end
-  else
-    side = isOpen(channel)
+-- Send raw messages
+function sendRaw(channel, replyChannel, msg, side)
+  if not side then
+    side = getWorkingModemSide()
 
     if not side then
-      error("Channel " .. channel .. " not openend on any sides.", 2)
+      return false
     end
   end
 
-  peripheral.call(side, "transmit", channel, 0, msg)
+  peripheral.call(side, "transmit", channel, replyChannel, msg)
+  return true
 end
 
 function isOpen(channel, sides)
@@ -81,6 +100,16 @@ function isOpen(channel, sides)
           return sides[i]
         end
       end
+    end
+  end
+
+  return false
+end
+
+function getWorkingModemSide()
+  for side, channels in pairs(redComSides) do
+    if peripheral.getType(side) == "modem" then
+      return side
     end
   end
 
@@ -178,3 +207,5 @@ function openMeetingChannel(channel, privateKey)
   meetingChannel = channel
   isAcceptingConnection = true
 end
+
+print("RedCom API Loaded")

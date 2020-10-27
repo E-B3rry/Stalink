@@ -1,0 +1,43 @@
+if not mainPath then
+  local mainPathHandler = fs.open("/mainPath.dat", "r")
+  mainPath = mainPathHandler.readLine()
+  mainPathHandler.close()
+end
+
+os.loadAPI(mainPath .. "turtle/quarry_mining/quarryMining")
+os.loadAPI(mainPath .. "turtle/utilities/inv/inventory")
+os.loadAPI(mainPath .. "turtle/utilities/actionsController/turtleActions")
+os.loadAPI(mainPath .. "redcom/redCom")
+
+sizeX = nil
+sizeY = nil
+sizeZ = nil
+
+redCom.open(10)
+redCom.sendRaw(10, os.getComputerID(), "InitQuarry", nil)
+
+while not sizeX do
+  c, rc, msg, d = redCom.receiveRaw()
+  if msg then
+    print("Received : " .. tostring(msg))
+    if msg["x"] then
+      sizeX = msg["x"]
+      sizeY = msg["y"]
+      sizeZ = msg["z"]
+    end
+  end
+end
+
+local Q = quarryMining.createQuarry(
+  true,
+  {["x"] = sizeX, ["y"] = sizeY, ["z"] = sizeZ},
+  {["x"] = 0, ["y"] = 0, ["z"] = 0},
+  true,
+  10,
+  {["x"] = 880, ["y"] = 62, ["z"] = -814}
+)
+
+while Q["status"] ~= "success" do
+  Q = quarryMining.run(Q)
+  turtleActions.execute()
+end

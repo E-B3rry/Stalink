@@ -1,18 +1,37 @@
 -- Load APIs --
 local mainPath = fs.open("/mainPath.dat", "r")
 
-os.loadAPI(mainPath.readLine() .. "turtle/utilities/mining/pathSystem")
-os.loadAPI(mainPath.readLine() .. "turtle/utilities/quarry_mining/quarryMining")
-os.loadAPI(mainPath.readLine() .. "handler/utilities/requestUtils")
+A = mainPath.readLine()
+os.loadAPI(A .. "turtle/utilities/mining/pathSystem")
+os.loadAPI(A .. "turtle/quarry_mining/quarryMining")
+os.loadAPI(A .. "handler/utilities/requestUtils")
+os.loadAPI(A .. "redcom/redCom")
 
-fs.close(mainPath)
+mainPath.close()
 
 
-getmetatable('').__index = function(str,i) return string.sub(str,i,i) end
+--getmetatable('').__index = function(str,i) return string.sub(str,i,i) end
+
+function writeF(txt)
+  print(tostring(txt))
+  peripheral.call( "left", "write", (tostring(txt).."\n"))
+end
+
+
+function Ask(RequestObj, rc)
+  if RequestObj == "InitQuarry" then
+    --redCom.open(rc)
+    redCom.sendRaw(10, os.getComputerID(), {"x" = 10, "y" = 10, "z" = 10}, nil)
+  end
+end
 -- Master Stalin --
+redCom.open(10)
 
-
---Variable System (by Jules)--
+while true do
+  c, rc, msg, d = redCom.receiveRaw()
+  writeF(msg)
+  Ask(msg, rc)
+end
 
 
 -- Request System --
@@ -23,22 +42,3 @@ getmetatable('').__index = function(str,i) return string.sub(str,i,i) end
     --Fuel level in 4 digits
 
     --Return code : {x,y,z(nil if no need), command}
-function Ask(RequestObj)
-  objID = RequestObj[1]
-
-  --start unzip
-  Zip = RequestObj[2]
-  objJob = Zip[1]
-  objRequest = Zip[2]..Zip[3]
-  objInventory = Zip[4]
-  objFuelLevel = tonumber(Zip[5]..Zip[6]..Zip[7]..Zip[8]) or 0
-
-  --start Analysing
-  if objJob == "Q" then
-
-  elseif objJob == "S" then
-  elseif objJob == "P" then
-  else
-    print("Error : Unknown job for the " .. objID .. " object")
-  end
-end

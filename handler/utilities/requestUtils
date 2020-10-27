@@ -1,9 +1,12 @@
 -- Load APIs and set constants --
 local mainPath = fs.open("/mainPath.dat", "r")
-os.loadAPI(mainPath.readLine() .. "redCom/redCom")
-fs.close(mainPath)
+A = mainPath.readLine()
+os.loadAPI(A .. "redcom/redCom")
+mainPath.close()
 
 MEETING_CHANNEL = 65135
+
+print("Request Utils System Loaded")
 
 -- Initialization function --
 function Init()
