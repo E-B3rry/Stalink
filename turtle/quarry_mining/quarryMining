@@ -5,7 +5,6 @@ local lastID = 0
 function createQuarry(running, size, relativesToChest, doRefuelWithMaterials, priority, realCoordinates)
   quarryObject = {
     ["id"] = {os.getComputerID(), lastID},
-    ["isRunning"] = "running",
     ["status"] = "mining",
 
     ["actualX"] = 0,
@@ -37,11 +36,132 @@ function createQuarry(running, size, relativesToChest, doRefuelWithMaterials, pr
   return quarryObject
 end
 
+function returnToMainPos(quarryObject)
+  if quarryObject["facing"] ~= 0 and (quarryObject["actualY"] > 0 or quarryObject["actualZ"] > 0) then
+    if quarryObject["facing"] < 3 then
+      quarryObject["lastAction"] = turtleActions.left()
+    else
+      quarryObject["lastAction"] = turtleActions.right()
+    end
+  elseif quarryObject["actualY"] > 0 then
+    quarryObject["lastAction"] = turtleActions.up()
+  elseif quarryObject["actualZ"] > 0 then
+    quarryObject["lastAction"] = turtleActions.back()
+  elseif quarryObject["actualX"] > 0 then
+    if quarryObject["facing"] < 2 then
+      quarryObject["lastAction"] = turtleActions.left()
+    elseif quarryObject["facing"] == 2 then
+      quarryObject["lastAction"] = turtleActions.right()
+    else
+      quarryObject["lastAction"] = turtleActions.fwd()
+    end
+  end
+
+  if quarryObject["actualX"] == 0 and quarryObject["actualY"] == 0 and quarryObject["actualZ"] == 0 then
+    if quarryObject["status"] == "ended" then
+      if quarryObject["facing"] > 1 then
+        quarryObject["lastAction"] = turtleActions.right()
+      elseif quarryObject["facing"] == 1 then
+        quarryObject["lastAction"] = turtleActions.left()
+      else
+        quarryObject["status"] = "success"
+      end
+    else
+      quarryObject["status"] = "atStartingPoint"
+    end
+  end
+
+  return quarryObject
+end
+
+function mining(quarryObject)
+
+  if quarryObject["actualX"] == (quarryObject["xSize"] * ((quarryObject["actualY"] + 1) % 2)) and quarryObject["actualZ"] == (quarryObject["zSize"] * ((quarryObject["actualX"] + quarryObject["actualY"] + 1) % 2)) then
+    if quarryObject["actualY"] >= quarryObject["ySize"] then
+      quarryObject["status"] = "ended"
+
+      return quarryObject
+    end
+
+    if turtle.inspectDown() then
+      quarryObject["lastAction"] = turtleActions.digDown(TOOL_SIDE)
+    else
+      quarryObject["lastAction"] = turtleActions.down()
+    end
+
+    return quarryObject
+  end
+
+  if (math.abs(quarryObject["actualX"] + quarryObject["actualY"]) % 2 == 1) then
+    if quarryObject["actualZ"] > 0 then
+      if quarryObject["facing"] == 2 then
+        if turtle.inspect() then
+          quarryObject["lastAction"] = turtleActions.dig()
+        else
+          quarryObject["lastAction"] = turtleActions.fwd()
+        end
+      elseif quarryObject["facing"] == 0 or quarryObject["facing"] == 1 then
+        quarryObject["lastAction"] = turtleActions.right()
+      elseif quarryObject["facing"] == 3 then
+        quarryObject["lastAction"] = turtleActions.left()
+      end
+    else
+      if quarryObject["actualY"] % 2 == 1 then
+        if quarryObject["facing"] == 2 then
+          quarryObject["lastAction"] = turtleActions.right()
+        elseif turtle.inspect() then
+          quarryObject["lastAction"] = turtleActions.dig()
+        else
+          quarryObject["lastAction"] = turtleActions.fwd()
+        end
+      else
+        if quarryObject["facing"] == 2 then
+          quarryObject["lastAction"] = turtleActions.left()
+        elseif turtle.inspect() then
+          quarryObject["lastAction"] = turtleActions.dig()
+        else
+          quarryObject["lastAction"] = turtleActions.fwd()
+        end
+      end
+    end
+  else
+    if quarryObject["actualZ"] < quarryObject["zSize"] then
+      if quarryObject["facing"] == 0 then
+        if turtle.inspect() then
+          quarryObject["lastAction"] = turtleActions.dig()
+        else
+          quarryObject["lastAction"] = turtleActions.fwd()
+        end
+      elseif quarryObject["facing"] == 1 or quarryObject["facing"] == 2 then
+        quarryObject["lastAction"] = turtleActions.left()
+      elseif quarryObject["facing"] == 3 then
+        quarryObject["lastAction"] = turtleActions.right()
+      end
+    else
+      if quarryObject["actualY"] % 2 == 1 then
+        if quarryObject["facing"] == 0 then
+          quarryObject["lastAction"] = turtleActions.left()
+        elseif turtle.inspect() then
+          quarryObject["lastAction"] = turtleActions.dig()
+        else
+          quarryObject["lastAction"] = turtleActions.fwd()
+        end
+      else
+        if quarryObject["facing"] == 0 then
+          quarryObject["lastAction"] = turtleActions.right()
+        elseif turtle.inspect() then
+          quarryObject["lastAction"] = turtleActions.dig()
+        else
+          quarryObject["lastAction"] = turtleActions.fwd()
+        end
+      end
+    end
+  end
+
+  return quarryObject
+end
 
 function run(quarryObject)
-  local fuelLevel = turtle.getFuelLevel()
-  local processedStepsLeftFuel = quarryObject["actualX"] + quarryObject["actualY"] + quarryObject["actualZ"] + math.abs(quarryObject["chestX"]) + math.abs(quarryObject["chestY"]) + math.abs(quarryObject["chestZ"])
-
   -- Check if the last action has been correctly executed --
   if quarryObject["lastAction"] then
     if turtleActions.getResult(quarryObject["lastAction"][1]) then
@@ -69,7 +189,7 @@ function run(quarryObject)
         elseif facing == 2 then
           quarryObject["actualZ"] = quarryObject["actualZ"] + 1
         elseif facing == 3 then
-          quarryObject["actualZ"] = quarryObject["actualX"] + 1
+          quarryObject["actualX"] = quarryObject["actualX"] + 1
         end
       elseif action == 2 then
         quarryObject["facing"] = (quarryObject["facing"] - 1) % 4
@@ -92,152 +212,30 @@ function run(quarryObject)
   end
 
   -- Check if the turtle still has place --
-  hasPlace = inventory.hasTurtleInvHasEmptySlots()
+  --hasPlace = inventory.hasTurtleInvHasEmptySlots()
 
-  if not hasPlace then
-    -- Flemme
-    --quarryObject["status"] = "empty"
-    return quarryObject
-  end
+  --if not hasPlace then
+  --  quarryObject["status"] = "returning"
+  --  return quarryObject
+  --end
 
-  if processedStepsLeftFuel < fuelLevel + 10 then
+  local fuelLevel = turtle.getFuelLevel()
+  local processedStepsLeftFuel = quarryObject["actualX"] + quarryObject["actualY"] + quarryObject["actualZ"] + math.abs(quarryObject["chestX"]) + math.abs(quarryObject["chestY"]) + math.abs(quarryObject["chestZ"])
+
+  if processedStepsLeftFuel > fuelLevel - 10 then
     if quarryObject["doRefuelWithMaterials"] then
       if not inventory.refuelTurtle() then
-        -- Flemme
-        --quarryObject["status"] = "refueling"
+        quarryObject["status"] = "returning"
       end
     else
-      -- Flemme
-      --quarryObject["status"] = "refueling"
+      quarryObject["status"] = "returning"
     end
   end
 
-  if quarryObject["status"] == "mining" then
-    if quarryObject["actualX"] == (quarryObject["xSize"] * ((quarryObject["actualY"] + 1) % 2)) and quarryObject["actualZ"] == (quarryObject["zSize"] * ((quarryObject["actualX"] + quarryObject["actualY"] + 1) % 2)) then
-      if quarryObject["actualY"] >= quarryObject["ySize"] then
-        print("-- FINISHED --")
-        quarryObject["status"] = "success"
-        return quarryObject
-      end
-
-      if turtle.inspectDown() then
-        quarryObject["lastAction"] = turtleActions.digDown(TOOL_SIDE)
-      else
-        quarryObject["lastAction"] = turtleActions.down()
-      end
-
-      --if quarryObject["facing"] == 3 then
-        --quarryObject["status"] = "returning_to_xz_start"
-
-      --elseif quarryObject["facing"] == 1 or quarryObject["facing"] == 2 then
-        --quarryObject[lastMovement] = {"l", turtleMove.left()}
-      --  turtle.turnRight()
-      --  quarryObject["facing"] = quarryObject["facing"] + 1
-      --elseif quarryObject["facing"] == 0 then
-        --quarryObject[lastMovement] = {"l", turtleMove.right()}
-      --  turtle.turnLeft()
-      --  quarryObject["facing"] = 3
-      --end
-      return quarryObject
-    end
-
-    --print("X  :  " .. tonumber(quarryObject["actualX"]) .. " - State : " .. tonumber(math.abs(quarryObject["actualX"] + quarryObject["actualY"]) % 2))
-    --print("Y : " .. quarryObject["actualY"] .. " - Z : " .. quarryObject["actualZ"])
-    --print("Facing : " .. quarryObject["facing"])
-
-    if (math.abs(quarryObject["actualX"] + quarryObject["actualY"]) % 2 == 1) then
-      if quarryObject["actualZ"] > 0 then
-        if quarryObject["facing"] == 2 then
-          if turtle.inspect() then
-            quarryObject["lastAction"] = turtleActions.dig()
-          else
-            quarryObject["lastAction"] = turtleActions.frwd()
-          end
-        elseif quarryObject["facing"] == 0 or quarryObject["facing"] == 1 then
-          quarryObject["lastAction"] = turtleActions.right()
-        elseif quarryObject["facing"] == 3 then
-          quarryObject["lastAction"] = turtleActions.left()
-        end
-      else
-        if quarryObject["actualY"] % 2 == 1 then
-          if quarryObject["facing"] == 2 then
-            quarryObject["lastAction"] = turtleActions.right()
-          elseif turtle.inspect() then
-            quarryObject["lastAction"] = turtleActions.dig()
-          else
-            quarryObject["lastAction"] = turtleActions.frwd()
-          end
-        else
-          if quarryObject["facing"] == 2 then
-            quarryObject["lastAction"] = turtleActions.left()
-          elseif turtle.inspect() then
-            quarryObject["lastAction"] = turtleActions.dig()
-          else
-            quarryObject["lastAction"] = turtleActions.frwd()
-          end
-        end
-      end
-    else
-      if quarryObject["actualZ"] < quarryObject["zSize"] then
-        if quarryObject["facing"] == 0 then
-          if turtle.inspect() then
-            quarryObject["lastAction"] = turtleActions.dig()
-          else
-            quarryObject["lastAction"] = turtleActions.frwd()
-          end
-        elseif quarryObject["facing"] == 1 or quarryObject["facing"] == 2 then
-          quarryObject["lastAction"] = turtleActions.left()
-        elseif quarryObject["facing"] == 3 then
-          quarryObject["lastAction"] = turtleActions.right()
-        end
-      else
-        if quarryObject["actualY"] % 2 == 1 then
-          if quarryObject["facing"] == 0 then
-            quarryObject["lastAction"] = turtleActions.left()
-          elseif turtle.inspect() then
-            quarryObject["lastAction"] = turtleActions.dig()
-          else
-            quarryObject["lastAction"] = turtleActions.frwd()
-          end
-        else
-          if quarryObject["facing"] == 0 then
-            quarryObject["lastAction"] = turtleActions.right()
-          elseif turtle.inspect() then
-            quarryObject["lastAction"] = turtleActions.dig()
-          else
-            quarryObject["lastAction"] = turtleActions.frwd()
-          end
-        end
-      end
-    end
-  elseif quarryObject["status"] == "returning_to_xz_start" then
-    -- Only works with pair x size
-    if quarryObject["actualX"] > 0 then
-      turtle.forward()
-      quarryObject["actualX"] = quarryObject["actualX"] - 1
-    elseif quarryObject["actualX"] == 0 then
-      if quarryObject["actualZ"] > 0 then
-        if quarryObject["facing"] ~= 2 then
-          turtle.turnLeft()
-        else
-          turtle.forward()
-          quarryObject["actualZ"] = quarryObject["actualZ"] - 1
-        end
-      else
-        if quarryObject["facing"] ~= 0 then
-          turtle.turnLeft()
-        else
-          turtle.digDown(TOOL_SIDE)
-          turtle.down()
-          quarryObject["actualY"] = quarryObject["actualY"] + 1
-          if quarryObject["actualY"] < quarryObject["ySize"] then
-            quarryObject["status"] = "mining"
-          else
-            quarryObject["status"] = "success"
-          end
-        end
-      end
-    end
+  if quarryObject["status"] == "ended" or quarryObject["status"] == "returning" then
+    quarryObject = returnToMainPos(quarryObject)
+  elseif quarryObject["status"] == "mining" then
+    quarryObject = mining(quarryObject)
   end
 
   return quarryObject

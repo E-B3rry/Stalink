@@ -1,9 +1,10 @@
 function hasTurtleInvHasEmptySlots()
-  for i = 1,16 do
+  for i = 1, 16 do
     if turtle.getItemCount(i) == 0 then
       return true
     end
   end
+
   return false
 end
 

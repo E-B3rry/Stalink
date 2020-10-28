@@ -41,3 +41,5 @@ while Q["status"] ~= "success" do
   Q = quarryMining.run(Q)
   turtleActions.execute()
 end
+
+print("-- FINISHED --")

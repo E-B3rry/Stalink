@@ -44,7 +44,7 @@ function getResult(id)
   end
 end
 
-function frwd()
+function fwd()
   table.insert(queue, 0)
   table.insert(queueID, lastID)
   lastID = lastID + 1
