@@ -20,6 +20,42 @@ redComSides = {
 
 -- Define functions
 
+-- Receive function
+function receive()
+  channel, replyChannel, msg, distance = receiveRaw()
+
+  if not msg then
+    return nil
+  end
+
+  if msg[1] == 0 then
+    return replyChannel, msg, distance
+  end
+
+  msg = msg[2]
+
+  -- Handle meeting channel
+  if channel == meetingChannel then
+    -- Check if there is an encryption system
+    if meetingPrivateKey then
+      -- Will do it later because of flemme
+      -- (And will check with like the some test bytes that the decryption worked)
+      -- Maybe using CRC of the msg as the first bytes
+    end
+
+    if isAcceptingConnection then
+      newConnection = {
+        ["id"] = generateNewConnectionID(),
+        ["channel"] = msg[1],
+        ["machine_name"] = msg[2],
+        ["machine_type"] = msg[3]
+      }
+    else
+
+    end
+  end
+end
+
 -- Raw receive function
 function receiveRaw()
   -- Pulling event from os queue (Using a specific way so that os.pullEvent doesn't block the program)
@@ -64,7 +100,9 @@ function receiveRaw()
   -- end
 
   -- Simply returning the message
-  print("Blobby 4")
+
+  msg = textutils.unserialize(msg)
+
   return channel, replyChannel, msg, distance
 end
 
@@ -77,6 +115,8 @@ function sendRaw(channel, replyChannel, msg, side)
       return false
     end
   end
+
+  msg = textutils.serialize(msg)
 
   peripheral.call(side, "transmit", channel, replyChannel, msg)
   return true
@@ -167,7 +207,7 @@ function open(channels, side)
   elseif type(channels) == "table" then
     for channel in channels do
       if not isOpen(channel) then
-        __InternalFunction_Open__(channel, side)
+        open__InternalFunction_Open__(channel, side)
       end
     end
   else
@@ -209,7 +249,7 @@ function close(channels)
   return true
 end
 
-function __InternalFunction_Open__(channel, side)
+function open__InternalFunction_Open__(channel, side)
   if #(redComSides[side]) > 127 then
     if notSpecifiedSide then
       side = getOpenableModemSide()
@@ -224,6 +264,10 @@ function __InternalFunction_Open__(channel, side)
 
   peripheral.call(side, "open", channel)
   redComSides[side].insert(channel)
+end
+
+function generateNewConnectionID()
+  -- Need to work on the function that generates unique connection id
 end
 
 function openMeetingChannel(channel, privateKey)
