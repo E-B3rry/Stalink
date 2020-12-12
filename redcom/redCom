@@ -1,6 +1,9 @@
 -- Load APIs and set constants --
 os.unloadAPI("rednet")
 
+-- Define constants
+local __TCP_PORTS_RANGE__ = {30000, 40000}
+
 -- Set local variables
 local meetingChannel = 0
 local meetingPrivateKey = nil
@@ -8,13 +11,15 @@ local meetingPrivateKey = nil
 local connections = {}
 local isAcceptingConnection = false
 
+local lastConnectionID = 0;
+
 redComSides = {
-  ["left"] = {},
-  ["right"] = {},
-  ["up"] = {},
-  ["down"] = {},
-  ["front"] = {},
-  ["back"] = {}
+	["left"] = {},
+	["right"] = {},
+	["up"] = {},
+	["down"] = {},
+	["front"] = {},
+	["back"] = {}
 }
 
 
@@ -22,38 +27,64 @@ redComSides = {
 
 -- Receive function
 function receive()
-  channel, replyChannel, msg, distance = receiveRaw()
+	channel, replyChannel, msg, distance = receiveRaw()
 
-  if not msg then
-    return nil
-  end
+	if not msg then
+		return nil
+	end
 
-  if msg[1] == 0 then
-    return replyChannel, msg, distance
-  end
-
-  msg = msg[2]
+	if msg[1] == 0 then
+		return replyChannel, msg, distance
+	end
 
   -- Handle meeting channel
-  if channel == meetingChannel then
-    -- Check if there is an encryption system
-    if meetingPrivateKey then
-      -- Will do it later because of flemme
-      -- (And will check with like the some test bytes that the decryption worked)
-      -- Maybe using CRC of the msg as the first bytes
-    end
+	if channel == meetingChannel then
+		if msg[3] == 1 then
+			-- Check if there is an encryption system
+			if meetingPrivateKey then
+			  -- Will do it later because of flemme
+			  -- (And will check with like the some test bytes that the decryption worked)
+			  -- Maybe using CRC of the msg as the first bytes
+			end
 
-    if isAcceptingConnection then
-      newConnection = {
-        ["id"] = generateNewConnectionID(),
-        ["channel"] = msg[1],
-        ["machine_name"] = msg[2],
-        ["machine_type"] = msg[3]
-      }
-    else
+			if isAcceptingConnection then
+				workingChannel = getNextFreeChannel()
 
-    end
-  end
+				newConnection = {
+					["id"] = generateNewConnectionID(),
+					["channel"] = workingChannel,
+					["machine_id"] = msg[4]
+					["machine_name"] = msg[5],
+					["machine_type"] = msg[6]
+				}
+				-- First param : 0 = Raw data, 1 = TCP data
+				-- Second param : Unique recipient ID
+				-- Third param : Package type (0 = Message, 1 = Handshake, 2 = HandshakeAnswer, 3 = HandshakeConfirmation)
+				-- Fourth param : Unique sender ID
+				-- Fifth param : Name of this machine
+				-- Sixth param : Type of this machine
+
+				open(workingChannel)
+
+				sendRaw(meetingChannel, workingChannel, {1, id, 2, 1, id, machineName, machineType, workingChannel})
+				-- First param : 0 = Raw data, 1 = TCP data
+				-- Second param : Unique recipient ID
+				-- Third param : Package type (0 = Message, 1 = Handshake, 2 = HandshakeAnswer, 3 = HandshakeConfirmation)
+				-- Fourth param : 0 = Connection refused, 1 = Connection allowed
+				-- Fifth param : Name of this machine
+				-- Sixth param : Type of this machine
+				-- Seventh param : Channel for TCP tunnel
+			else
+				sendRaw(meetingChannel, meetingChannel, {1, id, 2, 0})
+				-- First param : 0 = Raw data, 1 = TCP data
+				-- Second param : Unique recipient ID
+				-- Third param : Package type (0 = Message, 1 = Handshake, 2 = HandshakeAnswer, 3 = HandshakeConfirmation)
+				-- Fourth param : 0 = Connection refused, 1 = Connection allowed
+			end
+		end
+	else
+
+  	end
 end
 
 -- Raw receive function
@@ -64,30 +95,30 @@ function receiveRaw()
 
   -- Verify that the event is related to receive() function
   if eventTable[1] ~= "modem_message" and eventTable[2] ~= timer then
-    -- Take actions to put back the wrong event back in queue
-    os.cancelTimer(timer)
-    os.queueEvent(table.unpack(eventTable))
-    return nil
+	-- Take actions to put back the wrong event back in queue
+	os.cancelTimer(timer)
+	os.queueEvent(table.unpack(eventTable))
+	return nil
   end
 
   if eventTable[1] == "timer" and eventTable[2] == timer then
-    -- If the timer event is triggered, return nil
-    return nil
+	-- If the timer event is triggered, return nil
+	return nil
   end
 
   -- Unpack all the arguments and work with them
   local e, s, channel, replyChannel, msg, distance = table.unpack(eventTable)
 
   if msg then
-    for key, item in pairs(msg) do
-      print(tostring(key) .. " - " .. tostring(item))
-    end
+	for key, item in pairs(msg) do
+	  print(tostring(key) .. " - " .. tostring(item))
+	end
   end
 
   -- If the receiving channel is not registered as opened on the receiving side then ignore
   if not isOpen(channel, s) then
-    print("Blobby")
-    return nil
+	print("Blobby")
+	return nil
   end
 
   -- -- TCP like protocol handler
@@ -106,14 +137,25 @@ function receiveRaw()
   return channel, replyChannel, msg, distance
 end
 
--- Send raw messages
+-- Send messages to established connections
+function send(recipient, msg)
+
+end
+
+-- Get the next available channel for TCP protocol
+function getNextFreeChannel()
+	-- Need a good rework
+	return math.random(__TCP_PORTS_RANGE__[1], __TCP_PORTS_RANGE__[2])
+end
+
+-- Send raw data
 function sendRaw(channel, replyChannel, msg, side)
   if not side then
-    side = getWorkingModemSide()
+	side = getWorkingModemSide()
 
-    if not side then
-      return false
-    end
+	if not side then
+	  return false
+	end
   end
 
   msg = textutils.serialize(msg)
@@ -124,25 +166,25 @@ end
 
 function isOpen(channel, sides)
   if type(channel) ~= "number" then
-    error("Channel argument must be a number.", 2)
+	error("Channel argument must be a number.", 2)
   elseif channel < 1 or channel > 65535 then
-    error("Channel out of range [1 - 65535], got " .. channel .. ".", 2)
+	error("Channel out of range [1 - 65535], got " .. channel .. ".", 2)
   end
 
   if type(sides) == "string" then
-    sides = {sides}
+	sides = {sides}
   elseif type(sides) ~= "table" then
-    sides = {"left", "right", "up", "down", "front", "back"}
+	sides = {"left", "right", "up", "down", "front", "back"}
   end
 
   for i = 0, #sides do
-    if redComSides[sides[i]] then
-      for k, openedChannel in pairs(redComSides[sides[i]]) do
-        if channel == openedChannel then
-          return sides[i]
-        end
-      end
-    end
+	if redComSides[sides[i]] then
+	  for k, openedChannel in pairs(redComSides[sides[i]]) do
+		if channel == openedChannel then
+		  return sides[i]
+		end
+	  end
+	end
   end
 
   return false
@@ -150,9 +192,9 @@ end
 
 function getWorkingModemSide()
   for side, channels in pairs(redComSides) do
-    if peripheral.getType(side) == "modem" then
-      return side
-    end
+	if peripheral.getType(side) == "modem" then
+	  return side
+	end
   end
 
   return false
@@ -160,9 +202,9 @@ end
 
 function getOpenableModemSide()
   for side, channels in pairs(redComSides) do
-    if isSideOpenable(side) then
-      return side
-    end
+	if isSideOpenable(side) then
+	  return side
+	end
   end
 
   return false
@@ -170,96 +212,98 @@ end
 
 function isSideOpenable(side)
   if peripheral.getType(side) == "modem" then
-    if #(redComSides[side]) < 128 then
-      return true
-    end
+	if #(redComSides[side]) < 128 then
+	  return true
+	end
   end
 
   return false
 end
 
 function open(channels, side)
-  local notSpecifiedSide = false
+	local notSpecifiedSide = false
 
-  if side then
-    local t = peripheral.getType(side)
-    if t == nil then
-      error("No peripheral detected on side " .. side .. ".", 2)
-    elseif t ~= "modem" then
-      error("The peripheral connected to side " .. side .. " is not a modem.", 2)
-    end
 
-    if #(redComSides[side]) > 127 then
-      error("The " .. side .. " modem cannot open another channel (128 already in use).", 2)
-    end
-  else
-    side = getOpenableModemSide()
-    notSpecifiedSide = true
 
-    if not side then
-      error("There aren't any modem connected to the computer that can open channel.", 2)
-    end
-  end
+	if side then
+		local t = peripheral.getType(side)
+		if t == nil then
+		  error("No peripheral detected on side " .. side .. ".", 2)
+		elseif t ~= "modem" then
+		  error("The peripheral connected to side " .. side .. " is not a modem.", 2)
+		end
 
-  if type(channels) == "number" then
-    peripheral.call(side, "open", channels)
-    table.insert(redComSides[side], channels)
-  elseif type(channels) == "table" then
-    for channel in channels do
-      if not isOpen(channel) then
-        open__InternalFunction_Open__(channel, side)
-      end
-    end
-  else
-    error("Expected number or table of numbers for channels argument.", 2)
-  end
+		if #(redComSides[side]) > 127 then
+		  error("The " .. side .. " modem cannot open another channel (128 already in use).", 2)
+		end
+	  else
+		side = getOpenableModemSide()
+		notSpecifiedSide = true
 
-  return true
-end
+		if not side then
+		  error("There aren't any modem connected to the computer that can open channel.", 2)
+		end
+	  end
 
-function close(channels)
-  if type(channels) == "number" then
-    side = isOpen(channels)
-    if side then
-      peripheral.call(side, "close", channels)
-      for i = 0, #(redComSides[side]) do
-        if redComSides[side][i] == channels then
-          table.remove(redComSides[side], i)
-          break
-        end
-      end
-    end
-  elseif type(channels) == "table" then
-    for channel in channels do
-      side = isOpen(channel)
-      if side then
-        peripheral.call(side, "close", channel)
-        for i = 0, #(redComSides[side]) do
-          if redComSides[side][i] == channel then
-            table.remove(redComSides[side], i)
-            break
-          end
-        end
-      end
-    end
-  else
-    error("Expected number or table of numbers for channels argument.", 2)
-  end
+	  if type(channels) == "number" then
+		peripheral.call(side, "open", channels)
+		table.insert(redComSides[side], channels)
+	  elseif type(channels) == "table" then
+		for channel in channels do
+		  if not isOpen(channel) then
+			open__InternalFunction_Open__(channel, side)
+		  end
+		end
+	  else
+		error("Expected number or table of numbers for channels argument.", 2)
+	  end
 
-  return true
+	  return true
+	end
+
+	function close(channels)
+	  if type(channels) == "number" then
+		side = isOpen(channels)
+		if side then
+		  peripheral.call(side, "close", channels)
+		  for i = 0, #(redComSides[side]) do
+			if redComSides[side][i] == channels then
+			  table.remove(redComSides[side], i)
+			  break
+			end
+		  end
+		end
+	  elseif type(channels) == "table" then
+		for channel in channels do
+		  side = isOpen(channel)
+		  if side then
+			peripheral.call(side, "close", channel)
+			for i = 0, #(redComSides[side]) do
+			  if redComSides[side][i] == channel then
+				table.remove(redComSides[side], i)
+				break
+			  end
+			end
+		  end
+		end
+	else
+		error("Expected number or table of numbers for channels argument.", 2)
+	end
+
+  	return true
 end
 
 function open__InternalFunction_Open__(channel, side)
   if #(redComSides[side]) > 127 then
-    if notSpecifiedSide then
-      side = getOpenableModemSide()
+	if notSpecifiedSide then
+	  side = getOpenableModemSide()
 
-      if not side then
-        error("Couldn't open all channels because there aren't any modems connected to the computer that can open channel anymore. (All the modems have 128 channels in use)", 3)
-      end
-    else
-      error("Couldn't open all channels because " .. side .. " modem cannot open another channel (128 already in use).", 3)
-    end
+	  if not side then
+		error("Couldn't open all channels because there aren't any modems connected to the computer that can open channel anymore. (All the modems have 128 channels in use)", 3)
+	  end
+	else
+	  error("Couldn't open all channels because " .. side .. " modem cannot open another channel (128 already in use).", 3)
+	end
   end
 
   peripheral.call(side, "open", channel)
@@ -267,18 +311,18 @@ function open__InternalFunction_Open__(channel, side)
 end
 
 function generateNewConnectionID()
-  -- Need to work on the function that generates unique connection id
+	return (lastConnectionID = lastConnectionID + 1)
 end
 
 function openMeetingChannel(channel, privateKey)
   if isOpen(meetingChannel) then
-    close(meetingChannel)
+	close(meetingChannel)
   end
 
   if privateKey then
-    meetingPrivateKey = tostring(privateKey)
+	meetingPrivateKey = tostring(privateKey)
   else
-    meetingPrivateKey = nil
+	meetingPrivateKey = nil
   end
 
   open(channel)
@@ -290,7 +334,7 @@ print("RedCom API Loaded")
 
 function closeMeetingChannel()
   if isOpen(meetingChannel) then
-    close(meetingChannel)
+	close(meetingChannel)
   end
 
   meetingPrivateKey = nil
