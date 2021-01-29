@@ -18,6 +18,7 @@ end
 -- Request system --
 
 stalinedVariables = {}
+stalinedUpdated = false
 
 function receive()
   r = redCom.receive()
@@ -30,12 +31,13 @@ function receive()
 
 end
 
-function set_stalined_variable(var, value)
+function get_stalined_variable(var, value)
   if not type(var) == "string" then
     error("The var argument must be a string.", 2)
   end
 
   stalinedVariables[var] = value
+  stalinedUpdated = true
 end
 
 function remove_stalined_variable(var)
@@ -44,4 +46,5 @@ function remove_stalined_variable(var)
   end
 
   stalinedVariables[var] = nil
+  stalinedUpdated = true
 end

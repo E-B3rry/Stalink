@@ -1,3 +1,10 @@
+-- COMPLETELY
+-- UNSAFE
+-- FOR
+-- NOW
+-- AT
+-- LEAST
+
 -- Load APIs and set constants --
 os.unloadAPI("rednet")
 
@@ -34,7 +41,12 @@ function receive()
 	end
 
 	if msg[1] == 0 then
-		return replyChannel, msg, distance
+		return "UDP", replyChannel, msg, distance
+	end
+
+	-- Verify we're the targeted recipient
+	if msg[2] ~= os.getComputerID() then
+		return
 	end
 
   -- Handle meeting channel
@@ -52,38 +64,59 @@ function receive()
 
 				newConnection = {
 					["id"] = generateNewConnectionID(),
+					["status"] = 0, -- 0 is pending, 1 is working
 					["channel"] = workingChannel,
 					["machine_id"] = msg[4]
 					["machine_name"] = msg[5],
 					["machine_type"] = msg[6]
 				}
+				--- What was received ---
 				-- First param : 0 = Raw data, 1 = TCP data
 				-- Second param : Unique recipient ID
-				-- Third param : Package type (0 = Message, 1 = Handshake, 2 = HandshakeAnswer, 3 = HandshakeConfirmation)
+				-- Third param : Package type (0 = Message, 1 = Handshake, 2 = HandshakeAnswer, 3 = HandshakeConfirmation, 4 = Terminating)
 				-- Fourth param : Unique sender ID
 				-- Fifth param : Name of this machine
 				-- Sixth param : Type of this machine
 
 				open(workingChannel)
 
-				sendRaw(meetingChannel, workingChannel, {1, id, 2, 1, id, machineName, machineType, workingChannel})
+				table.insert(connections, newConnection)
+
+				sendRaw(meetingChannel, workingChannel, {1, id, 2, 1, machineName, machineType, workingChannel})
 				-- First param : 0 = Raw data, 1 = TCP data
 				-- Second param : Unique recipient ID
-				-- Third param : Package type (0 = Message, 1 = Handshake, 2 = HandshakeAnswer, 3 = HandshakeConfirmation)
+				-- Third param : Package type (0 = Message, 1 = Handshake, 2 = HandshakeAnswer, 3 = HandshakeConfirmation, 4 = Terminating)
 				-- Fourth param : 0 = Connection refused, 1 = Connection allowed
 				-- Fifth param : Name of this machine
 				-- Sixth param : Type of this machine
 				-- Seventh param : Channel for TCP tunnel
 			else
-				sendRaw(meetingChannel, meetingChannel, {1, id, 2, 0})
+				sendRaw(meetingChannel, meetingChannel, {1, id, 2, 0, 0})
 				-- First param : 0 = Raw data, 1 = TCP data
 				-- Second param : Unique recipient ID
-				-- Third param : Package type (0 = Message, 1 = Handshake, 2 = HandshakeAnswer, 3 = HandshakeConfirmation)
+				-- Third param : Package type (0 = Message, 1 = Handshake, 2 = HandshakeAnswer, 3 = HandshakeConfirmation, 4 = Terminating)
 				-- Fourth param : 0 = Connection refused, 1 = Connection allowed
+				-- Fifth param : 0 = Not accepting connection, 1 = Overloaded, 2 = Don't like ya
 			end
 		end
 	else
+		if msg[3] == 0 then
+			--- What was received ---
+			-- First param : 0 = Raw data, 1 = TCP data
+			-- Second param : Unique recipient ID
+			-- Third param : Package type (0 = Message, 1 = Handshake, 2 = HandshakeAnswer, 3 = HandshakeConfirmation, 4 = Terminating)
+			-- Fourth param : Message
 
+			-- Obtain connection ID
+			sender = retrieveConnection(channel)
+
+			return "TCP", senderID["id"], msg[4], distance
+		elseif msg[3] == 3 then
+			-- Fuck it, rework this thing later cauz that's just confirmation
+			sender, senderKey = retrieveConnection(channel)
+
+			connections[senderKey]["status"] = 1
+		end
   	end
 end
 
@@ -146,6 +179,15 @@ end
 function getNextFreeChannel()
 	-- Need a good rework
 	return math.random(__TCP_PORTS_RANGE__[1], __TCP_PORTS_RANGE__[2])
+end
+
+-- Get connection ID
+function retrieveConnection(channel)
+	for k, connection in pairs(connections):
+		if connection["channel"] == channel then
+			return connection, k
+		end
+	end
 end
 
 -- Send raw data
