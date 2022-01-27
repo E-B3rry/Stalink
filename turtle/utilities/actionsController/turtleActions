@@ -1,4 +1,4 @@
-local TOOL_SIDE = "left"
+local TOOL_SIDE = "right"
 
 local queue = {}
 local queueID = {}
@@ -20,9 +20,11 @@ local turtleActions = {
 }
 
 function execute()
+  print("Action queue : " .. tostring(#queue))
   while #queue > 0 do
     local action = table.remove(queue, 1)
     local id = table.remove(queueID, 1)
+    print("Last element : " .. tostring(action) .. " - " .. tostring(id))
 
     if turtleActions[action](TOOL_SIDE) then
       completedID[id] = true

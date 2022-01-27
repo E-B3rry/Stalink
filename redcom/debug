@@ -1,0 +1,34 @@
+-- Load APIs and set constants --
+local mainPath = fs.open("/mainPath.dat", "r")
+A = mainPath.readLine()
+os.loadAPI(A .. "redcom/redCom")
+mainPath.close()
+
+print("DISCLAIMER : This is a debug tool, it is not meant to be used in production.\
+Furthermore, it only allows you to use basic functionalities of the redCom API, at least for now.\n")
+
+-- Open redCom channel --
+redCom.open(135)
+
+-- Ask for user input --
+print("Enter r for receiving, s for sending: ")
+local choice = read()
+print("\n")
+
+if choice == "r" then
+    while true do
+        -- Receive data --
+        local chan, answerChan, data, distance = redCom.receiveRaw()
+        if data then
+            print("Received:\n- Channel used: " .. chan .. "\n- Msg received: " .. data .. "\n- Replying channel: " .. answerChan .. "\n- With a distance of: " .. distance .. "\n")
+        end
+    end
+elseif choice == "s" then
+    while true do
+        -- Send data --
+        print("Enter the data to be sent: ")
+        local data = read()
+        redCom.sendRaw(135, 135, data)
+        print("Data sent my boi!\n")
+    end
+end

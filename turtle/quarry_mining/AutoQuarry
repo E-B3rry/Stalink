@@ -37,8 +37,12 @@ local Q = quarryMining.createQuarry(
   {["x"] = 880, ["y"] = 62, ["z"] = -814}
 )
 
+print("Blobfish:")
+
 while Q["status"] ~= "success" do
+  print("Blobfish 1")
   Q = quarryMining.run(Q)
+  print("Blobfish 2")
   turtleActions.execute()
 end
 
