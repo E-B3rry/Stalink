@@ -1,34 +1,267 @@
 -- Load APIs and set constants --
 local mainPath = fs.open("/mainPath.dat", "r")
 A = mainPath.readLine()
-os.loadAPI(A .. "redcom/redCom")
 mainPath.close()
 
-print("DISCLAIMER : This is a debug tool, it is not meant to be used in production.\
-Furthermore, it only allows you to use basic functionalities of the redCom API, at least for now.\n")
+os.loadAPI(A .. "redcom/redCom")
+os.loadAPI(A .. "utilities/utils")
+
+
+-- Screen cleared and disclaimer --
+term.clear()
+term.setCursorPos(1,1)
+term.setTextColor(colors.red)
+print("DISCLAIMER : This is a debug tool, it is not of any use in production.\
+Furthermore, it only allows you to use or test basic functionalities of the redCom API, at least for now.\n")
+term.setTextColor(colors.white)
 
 -- Open redCom channel --
 redCom.open(135)
 
--- Ask for user input --
-print("Enter r for receiving, s for sending: ")
-local choice = read()
-print("\n")
+-- Wait for acknowledgement --
+print("\n\nWaiting for keypress...")
+os.pullEvent("key")
 
-if choice == "r" then
-    while true do
+-- Help and init message --
+local function print_msg()
+    term.setTextColor(colors.pink)
+    print("List of commands :")
+    term.setTextColor(colors.blue)
+    print("- help : displays this message\
+- open/close <port> : opens/closes a redCom channel\
+- listen : listen for any incoming traffic on opened channels\
+- udp_send : send udp packets on one or more channel\
+- tcp_send : send tcp packets on one or more channel\
+- tunnel : create a secure tunnel with another computer\
+- crc : test CRC\
+- ecc : test ECC encryption\
+- uid : generate an unique id\
+- exit : exit the program")
+end
+
+term.clear()
+term.setCursorPos(1,1)
+
+print_msg()
+
+-- Main loop --
+while true do
+    -- Ask for user input --
+    term.setTextColor(colors.white)
+    print("\nEnter command : ")
+    local choice = read()
+    print("\n")
+
+    if choice == "listen" then
         -- Receive data --
-        local chan, answerChan, data, distance = redCom.receiveRaw()
-        if data then
-            print("Received:\n- Channel used: " .. chan .. "\n- Msg received: " .. data .. "\n- Replying channel: " .. answerChan .. "\n- With a distance of: " .. distance .. "\n")
+
+        while true do
+            local chan, answerChan, data, distance = redCom.receiveRaw()
+
+            if data then
+                print("Received:\n- Channel used: " .. chan .. "\n- Msg received: " .. data .. "\n- Replying channel: " .. answerChan .. "\n- With a distance of: " .. distance .. "\n")
+            end
         end
-    end
-elseif choice == "s" then
-    while true do
+    elseif choice == "udp_send" then
         -- Send data --
-        print("Enter the data to be sent: ")
-        local data = read()
-        redCom.sendRaw(135, 135, data)
-        print("Data sent my boi!\n")
+
+        while true do
+            print("Enter the data to be sent: ")
+            local data = read()
+
+            redCom.sendRaw(135, 135, data)
+
+            print("Data sent me boi!\n")
+        end
+    elseif choice == "crc" then
+        math.randomseed(os.time())
+
+        term.clear()
+        term.setCursorPos(1,1)
+
+        print("Enter the error strength [0-255]: ")
+        local error_strength = tonumber(read())
+        print("\nSet max string length [0-BeforeMemoryOutage]: ")
+        local string_length = tonumber(read())
+        print("\nSet iterations count [0-PleaseBeReasonable]:")
+        local iterations = tonumber(read())
+        print("\n")
+
+        local messages_corrupted = 0
+        local success = 0
+        local false_negative = 0
+        local false_positive = 0
+
+        local data = ""
+        local data_corrupted = ""
+
+        for i = 1, iterations, 1 do
+            -- Generate random data, (probably) corrupt it and check CRC --
+            data = ""
+
+            -- Generate random data with specified length
+            for _ = 1, math.random(1, string_length) do
+                data = data .. string.char(math.random(32, 126))
+            end
+
+            data = redCom.CRC32(data)
+            data_corrupted = data
+
+            -- Corrupt data based on error strength
+            for j = 1, #data_corrupted, 1 do
+                if math.random(0, 255) < error_strength then
+                    data_corrupted = string.sub(data_corrupted, 1, j - 1) .. string.char(math.random(32, 126)) .. string.sub(data_corrupted, j + 1)
+                end
+            end
+
+            -- Check CRC
+            if data ~= data_corrupted then
+                messages_corrupted = messages_corrupted + 1
+
+                if redCom.CRC32_checksum_validation(data_corrupted) then
+                    false_positive = false_positive + 1
+                else
+                    success = success + 1
+                end
+            else
+                if redCom.CRC32_checksum_validation(data_corrupted) then
+                    success = success + 1
+                else
+                    false_negative = false_negative + 1
+                end
+            end
+
+            -- Display progress
+            if i % 500 == 0 then
+                term.clear()
+                term.setCursorPos(1,1)
+                term.setTextColor(colors.fromRGB(math.floor(255 - i / iterations * 255), math.floor(i / iterations * 255), math.floor(i / iterations * 155)))
+                print(i .. "/" .. iterations .. " iterations done.")
+            end
+
+            -- Yield to avoid crashing if the operations are taking too long
+            os.queueEvent("yield");
+            os.pullEvent();
+        end
+
+        -- Display results
+        term.clear()
+        term.setCursorPos(1,1)
+        term.setTextColor(colors.white)
+
+        print("CRC-32 test results:\n* Total messages: " .. iterations .. " (corrupted: " .. messages_corrupted .. ")\n- Success: " .. success .. "\n- False positive: " .. false_positive .. "\n- False negative: " .. false_negative)
+    elseif choice == "ecc" then
+        -- Generate two ECC keypair --
+        term.clear()
+        term.setCursorPos(1,1)
+
+        term.setTextColor(colors.blue)
+        print("== Generating two ECC keypair ==")
+        term.setTextColor(colors.orange)
+        local bob_private_key, bob_public_key = redCom.ECC_generate_keypair()
+        local alice_private_key, alice_public_key = redCom.ECC_generate_keypair()
+
+        print("\nGenerated new keypair for Bob :",
+                "\n- private key: " .. tostring(bob_private_key),
+                "\n- public key: " .. tostring(bob_public_key))
+
+        term.setTextColor(colors.purple)
+        print("\nGenerated new keypair for Alice :",
+                "\n- private key: " .. tostring(alice_private_key),
+                "\n- public key: " .. tostring(alice_public_key))
+
+        term.setTextColor(colors.white)
+        print("\n\nWaiting for keypress...")
+        os.pullEvent("key")
+
+        -- Generate shared secret --
+        term.clear()
+        term.setCursorPos(1,1)
+        term.setTextColor(colors.blue)
+        print("== Comparing shared secret ==")
+
+        term.setTextColor(colors.orange)
+        bob_shared_key = redCom.ECC_exchange(bob_private_key, alice_public_key)
+        print("\nShared secret from Bob:", tostring(bob_shared_key))
+
+        term.setTextColor(colors.purple)
+        alice_shared_key = redCom.ECC_exchange(alice_private_key, bob_public_key)
+        print("\nShared secret from Alice:", tostring(alice_shared_key))
+
+        if tostring(bob_shared_key) == tostring(alice_shared_key) then
+            term.setTextColor(colors.green)
+            print("\n> Shared secret is the same between Bob and Alice.")
+            term.setTextColor(colors.white)
+            print("\n\nWaiting for keypress...")
+            os.pullEvent("key")
+
+            -- Ask for a message to encrypt
+            term.clear()
+            term.setCursorPos(1,1)
+            term.setTextColor(colors.blue)
+            print("== Testing encryption and decryption ==")
+            term.setTextColor(colors.white)
+            print("\nEnter the message to encrypt: ")
+            local message = read()
+
+            if message ~= "" then
+                term.setTextColor(colors.yellow)
+                -- Encrypt the message --
+                encrypted_msg = redCom.ECC_encrypt(message, bob_shared_key)
+                print("\nEncrypted message: " .. tostring(encrypted_msg))
+
+                -- Decrypt the message --
+                decrypted_msg = redCom.ECC_decrypt(encrypted_msg, alice_shared_key)
+                print("Decrypted message: " .. tostring(decrypted_msg))
+
+                -- Compare the decrypted message with the original one --
+                if tostring(decrypted_msg) == tostring(message) then
+                    term.setTextColor(colors.green)
+                    print("\n> Message is the same after decryption.")
+                    term.setTextColor(colors.white)
+                else
+                    term.setTextColor(colors.red)
+                    print("\n> ERROR: Message is different after decryption.")
+                    term.setTextColor(colors.white)
+                end
+            else
+                print("\nNo message entered...")
+            end
+        else
+            term.setTextColor(colors.red)
+            print("\n> ERROR: Shared secret is different between Bob and Alice.")
+            term.setTextColor(colors.white)
+        end
+    elseif choice == "uid" then
+        print(redCom.generate_uid())
+    elseif choice == "help" then
+        -- Display help --
+        term.clear()
+        term.setCursorPos(1,1)
+
+        print_msg()
+    elseif choice == "exit" then
+        -- Exit --
+        redCom.close(135)
+
+        term.clear()
+        local w = term.getSize()
+        term.setCursorPos(math.floor(w / 2) - 5,3)
+        term.setTextColor(colors.green)
+
+        print("Goodbye! :)\n")
+
+        os.sleep(1.47)
+        term.clear()
+        term.setCursorPos(1,1)
+
+        break
+    else
+        -- Invalid choice --
+        term.clear()
+        term.setCursorPos(1,1)
+        term.setTextColor(colors.red)
+
+        print("Invalid choice, try again.")
     end
 end

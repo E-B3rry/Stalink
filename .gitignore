@@ -45,4 +45,4 @@ luac.out
 *.hex
 
 # Personnal ressources
-*.perso.png
+*.perso.*
