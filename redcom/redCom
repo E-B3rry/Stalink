@@ -1,5 +1,61 @@
 --- WIP
 
+--- RedCom-based communication system explained:
+--- RedCom layer
+-- Bytes array: {
+--   checksum: CRC32 - 32 bits
+--   flags: 8 bits
+--     1st & 2nd bits: (udp, tcp, tunnel, redauth)
+--     3rd & 4th bits: (raw, asymmetric encryption, symmetric encryption, both)
+--     5th-8th bits: (nil)
+--   src: 32 bits uid
+--   dest: 32 bits uid
+--   data: (undefined length)
+-- }
+
+--- TCP protocol
+-- RedCom layer +
+-- TCP bytes array: {
+--   flags: 8 bits (8 booleans)
+--     1st bit: FIN,
+--     2nd bit: SYN,
+--     3rd bit: RST,
+--     4th bit: PSH,
+--     5th bit: ACK,
+--     6th bit: URG,
+--     7th bit: ECN-Echo,
+--     8th bit: CWR
+--  seq: 32 unsigned bits
+--  ack: 32 unsigned bits
+--  data: undefined length
+-- }
+
+--- UDP protocol
+-- RedCom layer +
+-- UDP bytes array: {
+--   data: undefined length
+-- }
+
+--- Tunnel protocol (Not implemented yet)
+-- RedCom layer +
+-- Tunnel bytes array: {
+--   Protocol not defined yet
+-- }
+
+--- RedAuth protocol
+-- RedCom layer +
+-- RedAuth bytes array: {
+--   flags: 8 bits (8 booleans)
+--     1st bit: ASK,
+--     2nd bit: KNOWN,
+--     3rd bit: RENEW,
+--     4th bit: CLAIM,
+--     5th bit: FORGET_ME,
+--     6th bit: ERROR,
+--     7th bit: ACK,
+--     8th bit: NONE
+--   public_key: 168 bits
+
 -- ! TODO: Rework the API loading system
 --- Load APIs and set constants --
 os.unloadAPI("rednet")
@@ -78,106 +134,76 @@ function load_data()
         ids_table = textutils.unserialize(file.readAll())
         file.close()
     else
-        local file = fs.open(A .. "redcom/IDs.dat", "w")
         ids_table["self"] = generate_uid()
-        file.write(textutils.serialize(ids_table))
-        file.close()
+        ids_table["secure_provider"] = nil
+        ids_table["uid_tables"] = {}
+        save_data()
     end
+end
+
+
+function save_data()
+    local file = fs.open(A .. "redcom/IDs.dat", "w")
+    file.write(textutils.serialize(ids_table))
+    file.close()
 end
 
 
 -- Receive function
 function receive()
-    channel, replyChannel, msg, distance = receiveRaw()
+    local channel, replyChannel, data, distance = receiveRaw()
 
-    if not msg then
+    if not data then
         return nil
     end
 
-    if msg[1] == 0 then
-        return "UDP", replyChannel, msg, distance
-    end
-
-    -- Verify we're the targeted recipient
-    if msg[2] ~= os.getComputerID() then
-        return
-    end
-
-  -- Handle meeting channel
-    if channel == meetingChannel then
-        if msg[3] == 1 then
-            -- Check if there is an encryption system
-            if meetingPrivateKey then
-              -- Will do it later because of flemme
-              -- (And will check with like the some test bytes that the decryption worked)
-              -- Maybe using CRC of the msg as the first bytes
-            end
-
-            if isAcceptingTunneling then
-                workingChannel = getNextFreeChannel()
-
-                newConnection = {
-                    ["id"] = generateNewConnectionID(),
-                    ["status"] = 0, -- 0 is pending, 1 is working
-                    ["channel"] = workingChannel,
-                    ["machine_id"] = msg[4],
-                    ["machine_name"] = msg[5],
-                    ["machine_type"] = msg[6]
-                }
-                --- What was received ---
-                -- First param : 0 = Raw data, 1 = TCP data
-                -- Second param : Unique recipient ID
-                -- Third param : Package type (0 = Data, 1 = Synchronisation, 2 = SYN/ACK, 3 = Acknowledgement, 4 = Terminating)
-                -- Fourth param : Unique sender ID
-                -- Fifth param : Name of this machine
-                -- Sixth param : Type of this machine
-
-                open(workingChannel)
-
-                table.insert(tunnels, newConnection)
-
-                sendRaw(meetingChannel, workingChannel, {1, msg[4], 2, 1, machineName, machineType, workingChannel})
-                -- First param : 0 = Raw data, 1 = TCP data
-                -- Second param : Unique recipient ID
-                -- Third param : Package type (0 = Message, 1 = Handshake, 2 = HandshakeAnswer, 3 = HandshakeConfirmation, 4 = Terminating)
-                -- Fourth param : 0 = Connection refused, 1 = Connection allowed
-                -- Fifth param : Name of this machine
-                -- Sixth param : Type of this machine
-                -- Seventh param : Channel for TCP tunnel
-            else
-                sendRaw(meetingChannel, meetingChannel, {1, msg[4], 2, 0, 0})
-                -- First param : 0 = Raw data, 1 = TCP data
-                -- Second param : Unique recipient ID
-                -- Third param : Package type (0 = Message, 1 = Handshake, 2 = HandshakeAnswer, 3 = HandshakeConfirmation, 4 = Terminating)
-                -- Fourth param : 0 = Connection refused, 1 = Connection allowed
-                -- Fifth param : 0 = Not accepting connection, 1 = Overloaded, 2 = Don't like ya
-            end
-        end
+    -- CRC32 checksum
+    if CRC32_checksum_validation(data) then
+        data = data:sub(5)
     else
-        --- What was received ---
-        -- *First param : 0 = Raw data, 1 = TCP data
-        -- *Second param : Unique recipient ID
-        -- *Third param : Package type (0 = Message, 1 = Handshake, 2 = HandshakeAnswer, 3 = HandshakeConfirmation, 4 = Terminating)
-        -- Fourth param : Message
-        if msg[3] == 0 then
-            -- Obtain connection ID
-            sender = retrieveConnection(channel)
+        return nil
+    end
 
-            return "TCP", sender["id"], msg[4], distance
-        elseif msg[3] == 3 then
-            -- Fuck it, rework this thing later cauz that's just confirmation
-            sender, senderKey = retrieveConnection(channel)
+    local redcom_flags = data:sub(1, 1):byte()
+    local redcom_protocol = bit.band(redcom_flags, 0x03)
+    local redcom_encryption = bit.band(bit.blshift(redcom_flags, 2), 0x0C)
 
-            tunnels[senderKey]["status"] = 1
-        elseif msg[3] == 4 then
-            -- Needs a rework too to implement functionnalities, like connection history and banning
-            sender, senderKey = retrieveConnection(channel)
+    local src_uid = data:sub(2, 5)
+    local dest_uid = data:sub(6, 9)
 
-            tunnels[senderKey] = nil
-            return "TCP_Terminated", sender["id"], msg[4]
-        end
-      end
+    if dest_uid ~= ids_table["self"] then
+        return nil
+    end
+
+    local redcom_data = data:sub(10)
+
+    if redcom_protocol == 0 then
+        -- UDP protocol
+
+        return {
+            ["protocol"] = "udp",
+            ["src"] = src_uid,
+            ["is_src_approved"] = false, -- TODO: Implement
+            ["data"] = redcom_data,
+            ["distance"] = distance,
+            ["channel"] = channel,
+            ["reply_channel"] = replyChannel
+        }
+    elseif redcom_protocol == 1 then
+        -- TCP protocol
+
+        -- TODO: Implement
+    elseif redcom_protocol == 2 then
+        -- Tunnel protocol
+
+        -- TODO: Implement
+    elseif redcom_protocol == 3 then
+        -- RedAuth protocol
+
+        -- TODO: Implement
+    end
 end
+
 
 -- Raw receive function
 function receiveRaw()
@@ -198,11 +224,8 @@ function receiveRaw()
         return nil
     end
 
-    --print("Message received!")
-
     -- Unpack all the arguments and work with them
     local e, s, channel, replyChannel, msg, distance = table.unpack(eventTable)
-    --print("Channel : " .. tostring(channel))
 
     if msg then
         if type(msg) == "string" then
@@ -216,22 +239,9 @@ function receiveRaw()
 
     -- If the receiving channel is not registered as opened on the receiving side then ignore
     if not isOpen(tonumber(channel), s) then
-        print("Blobby fucked up there")
+        print("Blobby must have fucked up there...\nThe channel " .. channel .. " is not registered as opened on " .. s .. " side, but it is receiving data from it.")
         return nil
     end
-
-    -- -- TCP like protocol handler
-    -- if isAcceptingConnection then
-    --   if channel == meetingChannel then
-    --     if not meetingPrivateKey then
-    --       return "new_connection", channel, msg
-    --     end
-    --   end
-    -- end
-
-    -- Simply returning the message
-
-    msg = textutils.unserialize(msg)
 
     return channel, replyChannel, msg, distance
 end
@@ -284,7 +294,7 @@ function isOpen(channel, sides)
   if type(channel) ~= "number" then
     error("Channel argument must be a number.", 2)
   elseif channel < 0 or channel > 65535 then
-    error("Channel out of range [0 - 65535], got " .. channel .. ".", 2)
+    error("Channel out of range [0:65535], got " .. channel .. ".", 2)
   end
 
   if type(sides) == "string" then
@@ -345,6 +355,8 @@ end
 function open(channels, side)
     local notSpecifiedSide = false
 
+    -- TODO: Implement a protocol parameter for channel opening (tcp, udp or both)
+
     if side then
         local t = peripheral.getType(side)
         if t == nil then
@@ -396,6 +408,8 @@ end
 
 function close(channels)
     -- TODO: Close any tunnels that are using the channels
+
+    -- TODO: Implement a protocol parameter for channel closing (tcp, udp or both)
 
     if type(channels) == "number" then
         side = isOpen(channels)
@@ -542,4 +556,5 @@ end
 
 --- Run startup functions
 
+setupCRC32()
 load_data()

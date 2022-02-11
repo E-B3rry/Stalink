@@ -30,9 +30,9 @@ end
 redCom.open(10)
 
 while true do
-  c, rc, msg, d = redCom.receiveRaw()
-  writeF(msg)
-  Ask(msg, rc)
+  c, rc, data, d = redCom.receiveRaw()
+  writeF(data)
+  Ask(data, rc)
 end
 
 
