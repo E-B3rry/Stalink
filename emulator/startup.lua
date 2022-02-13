@@ -15,8 +15,8 @@ if ccemux then
         range = 64,
         interdimensional = false,
         world = "main",
-        posX = id * math.random(4, 6),
-        posY = id * math.random(4, 6),
+        posX = math.floor(id * math.random(4, 6)),
+        posY = math.floor(id * math.random(4, 6)),
         posZ = 110,
     })
 

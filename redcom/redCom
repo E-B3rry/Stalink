@@ -7,9 +7,10 @@
 --   flags: 8 bits
 --     1st & 2nd bits: (udp, tcp, tunnel, redauth)
 --     3rd & 4th bits: (raw, asymmetric encryption, symmetric encryption, both)
---     5th-8th bits: (nil)
---   src: 32 bits uid
---   dest: 32 bits uid
+--     5th & 6th bits: (unsigned, signed)
+--     6th-8th bits: (nil)
+--   src: 64 bits uid
+--   dest: 64 bits uid
 --   data: (undefined length)
 -- }
 
@@ -72,7 +73,7 @@ local __USABLE_RANGE__ = {0, 65532}
 -- Set local variables (Reworking)
 local ids_table = {}
 
-local meetingChannel = 0 -- Being replaced by a list of listened channels
+local meetingChannel = 0 -- Being replaced by a list of listened channels for tunneling
 local meetingPrivateKey = nil
 
 local channelsListened = {}
@@ -86,11 +87,11 @@ local isAcceptingTunneling = false
 
 local lastTunnelID = 0;
 
-redComSides = {
+local redComSides = {
     ["left"] = {},
     ["right"] = {},
-    ["up"] = {},
-    ["down"] = {},
+    ["top"] = {},
+    ["bottom"] = {},
     ["front"] = {},
     ["back"] = {}
 }
@@ -119,11 +120,17 @@ function generate_uid()
 
     local uid = hex_chars[info_bit + 1]
 
-    for _ = 1, 8, 1 do
+    for _ = 1, 15, 1 do
         uid = uid .. hex_chars[math.random(1, #hex_chars)]
     end
 
     return uid
+end
+
+
+-- Return the uid of this device in a readable format
+function get_my_uid()
+    return utils.convertBytesArrayToHexString(ids_table["self"])
 end
 
 
@@ -134,7 +141,7 @@ function load_data()
         ids_table = textutils.unserialize(file.readAll())
         file.close()
     else
-        ids_table["self"] = generate_uid()
+        ids_table["self"] = utils.convertHexStringToBytesArray(generate_uid())
         ids_table["secure_provider"] = nil
         ids_table["uid_tables"] = {}
         save_data()
@@ -161,6 +168,7 @@ function receive()
     if CRC32_checksum_validation(data) then
         data = data:sub(5)
     else
+        print("Info: CRC32 checksum error")
         return nil
     end
 
@@ -168,14 +176,15 @@ function receive()
     local redcom_protocol = bit.band(redcom_flags, 0x03)
     local redcom_encryption = bit.band(bit.blshift(redcom_flags, 2), 0x0C)
 
-    local src_uid = data:sub(2, 5)
-    local dest_uid = data:sub(6, 9)
+    local src_uid = data:sub(2, 9)
+    local dest_uid = data:sub(10, 17)
 
     if dest_uid ~= ids_table["self"] then
+        print("Info: Not the targeted recipient")
         return nil
     end
 
-    local redcom_data = data:sub(10)
+    local redcom_data = data:sub(18)
 
     if redcom_protocol == 0 then
         -- UDP protocol
@@ -184,7 +193,7 @@ function receive()
             ["protocol"] = "udp",
             ["src"] = src_uid,
             ["is_src_approved"] = false, -- TODO: Implement
-            ["data"] = redcom_data,
+            ["content"] = redcom_data,
             ["distance"] = distance,
             ["channel"] = channel,
             ["reply_channel"] = replyChannel
@@ -225,13 +234,13 @@ function receiveRaw()
     end
 
     -- Unpack all the arguments and work with them
-    local e, s, channel, replyChannel, msg, distance = table.unpack(eventTable)
+    local e, s, channel, replyChannel, data, distance = table.unpack(eventTable)
 
-    if msg then
-        if type(msg) == "string" then
+    if data then
+        if type(data) == "string" then
             --print("Message : " .. tostring(msg))
         else
-            for key, item in pairs(msg) do
+            for key, item in pairs(data) do
                 print(tostring(key) .. " - " .. tostring(item))
             end
         end
@@ -243,16 +252,49 @@ function receiveRaw()
         return nil
     end
 
-    return channel, replyChannel, msg, distance
+    return channel, replyChannel, data, distance
 end
+
 
 -- Send messages to established connections
 function sendTCP(recipient, msg)
-
+    local flags = 0x01
 end
 
-function sendUDP(channel, replyChannel, msg, side)
-    sendRaw(channel, replyChannel, msg, side)
+
+function sendUDP(channel, recipient, msg, replyChannel, side)
+    if channel == nil then
+        error("Channel number isn't specified", 2)
+    elseif channel < __USABLE_RANGE__[1] or channel > __USABLE_RANGE__[2] then
+        error("Channel number must be between " .. tostring(__USABLE_RANGE__[1]) .. " and " .. tostring(__USABLE_RANGE__[2]), 2)
+    end
+
+    if replyChannel == nil then
+        replyChannel = channel
+    elseif replyChannel < __USABLE_RANGE__[1] or replyChannel > __USABLE_RANGE__[2] then
+        error("Reply channel number must be between " .. tostring(__USABLE_RANGE__[1]) .. " and " .. tostring(__USABLE_RANGE__[2]) .. " or nil", 2)
+    end
+
+    if recipient == nil then
+        error("Recipient UID isn't specified", 2)
+    elseif type(recipient) == "string" then
+        if #recipient == 16 then
+            recipient = utils.convertHexStringToBytesArray(recipient)
+        elseif #recipient ~= 8 then
+            error("Recipient UID must be a 8-bytes bin or 16 chars hex string", 2)
+        end
+    else
+        error("Recipient UID must be a 8-bytes bin or 16 chars hex string", 2)
+    end
+
+    -- Create RedCom UDP packet
+    local flags = 0 -- TODO: Allow for encryption flags
+    local data = string.char(flags) .. ids_table["self"] .. recipient .. msg
+
+    -- CRC32 checksum
+    data = CRC32(data)
+
+    sendRaw(channel, replyChannel, data, side)
 end
 
 
@@ -274,7 +316,7 @@ end
 
 
 -- Send raw data
-function sendRaw(channel, replyChannel, msg, side)
+function sendRaw(channel, replyChannel, data, side)
   if not side then
     side = getWorkingModemSide()
 
@@ -283,9 +325,7 @@ function sendRaw(channel, replyChannel, msg, side)
     end
   end
 
-  msg = textutils.serialize(msg)
-
-  peripheral.call(side, "transmit", channel, replyChannel, msg)
+  peripheral.call(side, "transmit", channel, replyChannel, data)
   return true
 end
 
@@ -556,5 +596,5 @@ end
 
 --- Run startup functions
 
-setupCRC32()
+setupCRC32() -- TODO: Optimize this, it's called at every launch and is ressource intensive, just save it in a file at first launch and load it on startup
 load_data()

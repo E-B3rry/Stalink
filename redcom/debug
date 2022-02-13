@@ -53,23 +53,33 @@ while true do
     print("\n")
 
     if choice == "listen" then
+        print("Your own UID: " .. redCom.get_my_uid())
+
         -- Receive data --
 
         while true do
-            local chan, answerChan, data, distance = redCom.receiveRaw()
+            local data = redCom.receive()
 
             if data then
-                print("Received:\n- Channel used: " .. chan .. "\n- Msg received: " .. data .. "\n- Replying channel: " .. answerChan .. "\n- With a distance of: " .. distance .. "\n")
+                print("\nReceived " .. data["protocol"] .. " packet from " .. utils.convertBytesArrayToHexString(data["src"]) .. ":")
+                print("- Channel used: " .. data["channel"] .. "\n- Msg received: " .. data["content"] .. "\n- Replying channel: " .. data["reply_channel"] .. "\n- With a distance of: " .. data["distance"] .. "\n")
             end
         end
     elseif choice == "udp_send" then
-        -- Send data --
+        term.clear()
+        term.setCursorPos(1,1)
+
+        print("Your own UID: " .. redCom.get_my_uid())
 
         while true do
-            print("Enter the data to be sent: ")
+            -- Send data --
+            print("\n\nEnter the data to be sent: ")
             local data = read()
 
-            redCom.sendRaw(135, 135, data)
+            print("\nEnter the recipient UID: ")
+            local recipient = read()
+
+            redCom.sendUDP(135, recipient, data, nil, nil)
 
             print("Data sent me boi!\n")
         end
@@ -233,7 +243,62 @@ while true do
             term.setTextColor(colors.white)
         end
     elseif choice == "uid" then
-        print(redCom.generate_uid())
+        term.clear()
+        term.setCursorPos(1,1)
+
+        local orig_uid = redCom.generate_uid()
+        local base4_uid = utils.convertHexStringToBytesArray(orig_uid)
+        local base8_uid = utils.convertBytesArrayToHexString(base4_uid)
+
+        print("base8 hex string generated uid:" .. orig_uid)
+        print("base4 string converted uid:" .. base4_uid)
+        print("base8 converted back uid:" .. base8_uid)
+
+        if orig_uid == nil or base4_uid == nil or base8_uid == nil then
+            term.setTextColor(colors.red)
+            print("\n> ERROR: Something went wrong while generating or converting UID, got nil.")
+            term.setTextColor(colors.white)
+        else
+            term.setTextColor(colors.green)
+            print("\n> UID generated and converted without any errors.")
+            term.setTextColor(colors.white)
+        end
+
+        if #orig_uid == 16 then
+            term.setTextColor(colors.green)
+            print("\n> Generated 16 hex chars UID has valid length.")
+            term.setTextColor(colors.white)
+        else
+            term.setTextColor(colors.red)
+            print("\n> ERROR: Generated hex chars UID isn't 16 chars long, but " .. #orig_uid .. ".")
+            term.setTextColor(colors.white)
+        end
+
+        if #base4_uid == 8 then
+            term.setTextColor(colors.green)
+            print("> Converted 8 chars UID has valid length.")
+            term.setTextColor(colors.white)
+        else
+            term.setTextColor(colors.red)
+            print("> ERROR: Converted base-4 UID isn't 8 chars long, but " .. #base4_uid .. ".")
+            term.setTextColor(colors.white)
+        end
+
+        if base8_uid == orig_uid then
+            term.setTextColor(colors.green)
+            print("> UID is the same after two-ways conversion.")
+            term.setTextColor(colors.white)
+        else
+            term.setTextColor(colors.red)
+            print("> ERROR: UID is different after two-ways conversion.")
+            term.setTextColor(colors.white)
+        end
+
+        print("\n\nWaiting for keypress...")
+        os.pullEvent("key")
+
+        term.clear()
+        term.setCursorPos(1,1)
     elseif choice == "help" then
         -- Display help --
         term.clear()
