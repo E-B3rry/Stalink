@@ -37,7 +37,7 @@ function run()
       end
     end
 
-    isRunning = coroutine.yield() ? false : true
+    isRunning = coroutine.yield() == false
   end
 end
 

@@ -8,4 +8,4 @@ if not mainPath then
   error("Cannot read mainPath file")
 end
 
-os.loadAPI(mainPath .. "turtle/quarry_mining/AutoQuarry")
+os.loadAPI(mainPath .. "turtle/quarry_mining/auto_quarry.lua")

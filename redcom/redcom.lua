@@ -72,7 +72,7 @@ local mainPath = fs.open("/mainPath.dat", "r")
 A = mainPath.readLine()
 mainPath.close()
 
-os.loadAPI(A .. "utilities/ecc")
+os.loadAPI(A .. "utilities/ecc.lua")
 
 -- Define constants
 local __USABLE_RANGE__ = {0, 65532}
@@ -88,6 +88,7 @@ local settings = {
     },
     ["other"] = {
         ["available_sides"] = {"left", "right", "top", "bottom", "front", "back"}, -- Order impact priority
+        ["coroutine_yield_more"] = false,
         ["debug"] = true
     }
 }
@@ -162,6 +163,15 @@ function load_data()
         ids_table["secure_provider"] = nil
         ids_table["uid_tables"] = {}
         save_data()
+    end
+end
+
+
+-- Main run function
+function run_as_coroutine()
+    while true do
+        -- Add the receiving mechanism here (and make sure to yield)
+        handle_tcp_connections()
     end
 end
 
@@ -344,7 +354,7 @@ function send_tcp(channel, recipient, msg, replyChannel, side)
         ["side"] = side,
         ["recipient"] = recipient,
         ["data"] = msg,
-        ["sending"] = true,
+        ["sender"] = true,
         ["status"] = 0,
         ["last_communication"] = os.clock()
     }
@@ -659,8 +669,6 @@ function closeMeetingChannel()
     isAcceptingTunneling = false
 end
 
-print("RedCom API Loaded")
-
 
 --- Checksum calculation and verification, ECC encryption and decryption and key encryption and decryption
 
@@ -740,3 +748,5 @@ end
 
 setupCRC32() -- TODO: Optimize this, it's called at every launch and is ressource intensive, just save it in a file at first launch and load it on startup
 load_data()
+
+print("> RedCom API Loaded")

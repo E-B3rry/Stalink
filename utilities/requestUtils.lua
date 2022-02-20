@@ -1,7 +1,7 @@
 -- Load APIs and set constants --
 local mainPath = fs.open("/mainPath.dat", "r")
 A = mainPath.readLine()
-os.loadAPI(A .. "redcom/redCom")
+os.loadAPI(A .. "redcom/redcom.lua")
 mainPath.close()
 
 MEETING_CHANNEL = 65135
@@ -10,7 +10,6 @@ print("Request Utils System Loaded")
 
 -- Initialization function --
 function Init()
-  redCom.openMeetingChannel(MEETING_CHANNEL)
 
 
 end
@@ -21,7 +20,7 @@ stalinedVariables = {}
 stalinedUpdated = false
 
 function receive()
-  r = redCom.receive()
+  r = redcom.receive()
 
   if not r then
     returnValue = nil

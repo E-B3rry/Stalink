@@ -2,10 +2,10 @@
 local mainPath = fs.open("/mainPath.dat", "r")
 
 A = mainPath.readLine()
-os.loadAPI(A .. "turtle/utilities/mining/pathSystem")
-os.loadAPI(A .. "turtle/quarry_mining/quarryMining")
-os.loadAPI(A .. "handler/utilities/requestUtils")
-os.loadAPI(A .. "redcom/redCom")
+os.loadAPI(A .. "turtle/utilities/mining/path_system.lua")
+os.loadAPI(A .. "turtle/quarry_mining/quarry_mining.lua")
+os.loadAPI(A .. "handler/utilities/requestUtils.lua")
+os.loadAPI(A .. "redcom/redcom.lua")
 
 mainPath.close()
 
@@ -20,17 +20,17 @@ end
 
 function Ask(RequestObj, rc)
   if RequestObj == "InitQuarry" then
-    --redCom.open(rc)
-    redCom.sendRaw(10, os.getComputerID(), {["x"] = 10, ["y"] = 10, ["z"] = 10}, nil)
+    --redcom.lua.open(rc)
+    redcom.sendRaw(10, os.getComputerID(), {["x"] = 10, ["y"] = 10, ["z"] = 10}, nil)
   end
 end
 
 
 -- Master Stalin --
-redCom.open(10)
+redcom.open(10)
 
 while true do
-  c, rc, data, d = redCom.receiveRaw()
+  c, rc, data, d = redcom.receiveRaw()
   writeF(data)
   Ask(data, rc)
 end

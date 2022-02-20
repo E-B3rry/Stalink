@@ -6,4 +6,4 @@ if not mainPath then
   error("Cannot load mainPath file")
 end
 
-os.loadAPI(mainPath .. "handler/master/master")
+os.loadAPI(mainPath .. "handler/master/master.lua")

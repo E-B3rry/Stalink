@@ -3,8 +3,8 @@ local mainPath = fs.open("/mainPath.dat", "r")
 A = mainPath.readLine()
 mainPath.close()
 
-os.loadAPI(A .. "redcom/redCom")
-os.loadAPI(A .. "utilities/utils")
+os.loadAPI(A .. "redcom/redcom.lua")
+os.loadAPI(A .. "utilities/utils.lua")
 
 
 -- Screen cleared and disclaimer --
@@ -12,11 +12,11 @@ term.clear()
 term.setCursorPos(1,1)
 term.setTextColor(colors.red)
 print("DISCLAIMER : This is a debug tool, it is not of any use in production.\
-Furthermore, it only allows you to use or test basic functionalities of the redCom API, at least for now.\n")
+Furthermore, it only allows you to use or test basic functionalities of the redcom API, at least for now.\n")
 term.setTextColor(colors.white)
 
--- Open redCom channel --
-redCom.open(135)
+-- Open redcom channel --
+redcom.open(135)
 
 -- Wait for acknowledgement --
 print("\n\nWaiting for keypress...")
@@ -28,13 +28,13 @@ local function print_msg()
     print("List of commands :")
     term.setTextColor(colors.blue)
     print("- help : displays this message\
-- open/close <port> : opens/closes a redCom channel\
+- open/close <port> : opens/closes a redcom channel\
 - listen : listen for any incoming traffic on opened channels\
 - udp_send : send udp packets on one or more channel\
 - tcp_send : send tcp packets on one or more channel\
 - tunnel : create a secure tunnel with another computer\
 - crc : test CRC\
-- ecc : test ECC encryption\
+- ecc.lua : test ECC encryption\
 - uid : generate an unique id\
 - exit : exit the program")
 end
@@ -53,12 +53,12 @@ while true do
     print("\n")
 
     if choice == "listen" then
-        print("Your own UID: " .. redCom.get_my_uid())
+        print("Your own UID: " .. redcom.get_my_uid())
 
         -- Receive data --
 
         while true do
-            local data = redCom.receive()
+            local data = redcom.receive()
 
             if data then
                 print("\nReceived " .. data["protocol"] .. " packet from " .. utils.convertBytesArrayToHexString(data["src"]) .. ":")
@@ -69,7 +69,7 @@ while true do
         term.clear()
         term.setCursorPos(1,1)
 
-        print("Your own UID: " .. redCom.get_my_uid())
+        print("Your own UID: " .. redcom.get_my_uid())
 
         while true do
             -- Send data --
@@ -79,7 +79,7 @@ while true do
             print("\nEnter the recipient UID: ")
             local recipient = read()
 
-            redCom.send_udp(135, recipient, data, nil, nil)
+            redcom.send_udp(135, recipient, data, nil, nil)
 
             print("Data sent me boi!\n")
         end
@@ -87,7 +87,7 @@ while true do
         term.clear()
         term.setCursorPos(1,1)
 
-        print("Your own UID: " .. redCom.get_my_uid())
+        print("Your own UID: " .. redcom.get_my_uid())
 
         while true do
             -- Send data --
@@ -97,7 +97,7 @@ while true do
             print("\nEnter the recipient UID: ")
             local recipient = read()
 
-            redCom.send_tcp(135, recipient, data, nil, nil)
+            redcom.send_tcp(135, recipient, data, nil, nil)
 
             print("Data sent me boi!\n")
         end
@@ -132,7 +132,7 @@ while true do
                 data = data .. string.char(math.random(32, 126))
             end
 
-            data = redCom.CRC32(data)
+            data = redcom.CRC32(data)
             data_corrupted = data
 
             -- Corrupt data based on error strength
@@ -146,13 +146,13 @@ while true do
             if data ~= data_corrupted then
                 messages_corrupted = messages_corrupted + 1
 
-                if redCom.CRC32_checksum_validation(data_corrupted) then
+                if redcom.CRC32_checksum_validation(data_corrupted) then
                     false_positive = false_positive + 1
                 else
                     success = success + 1
                 end
             else
-                if redCom.CRC32_checksum_validation(data_corrupted) then
+                if redcom.CRC32_checksum_validation(data_corrupted) then
                     success = success + 1
                 else
                     false_negative = false_negative + 1
@@ -178,7 +178,7 @@ while true do
         term.setTextColor(colors.white)
 
         print("CRC-32 test results:\n* Total messages: " .. iterations .. " (corrupted: " .. messages_corrupted .. ")\n- Success: " .. success .. "\n- False positive: " .. false_positive .. "\n- False negative: " .. false_negative)
-    elseif choice == "ecc" then
+    elseif choice == "ecc.lua" then
         -- Generate two ECC keypair --
         term.clear()
         term.setCursorPos(1,1)
@@ -186,8 +186,8 @@ while true do
         term.setTextColor(colors.blue)
         print("== Generating two ECC keypair ==")
         term.setTextColor(colors.orange)
-        local bob_private_key, bob_public_key = redCom.ECC_generate_keypair()
-        local alice_private_key, alice_public_key = redCom.ECC_generate_keypair()
+        local bob_private_key, bob_public_key = redcom.ECC_generate_keypair()
+        local alice_private_key, alice_public_key = redcom.ECC_generate_keypair()
 
         print("\nGenerated new keypair for Bob :",
                 "\n- private key: " .. tostring(bob_private_key),
@@ -209,11 +209,11 @@ while true do
         print("== Comparing shared secret ==")
 
         term.setTextColor(colors.orange)
-        bob_shared_key = redCom.ECC_exchange(bob_private_key, alice_public_key)
+        bob_shared_key = redcom.ECC_exchange(bob_private_key, alice_public_key)
         print("\nShared secret from Bob:", tostring(bob_shared_key))
 
         term.setTextColor(colors.purple)
-        alice_shared_key = redCom.ECC_exchange(alice_private_key, bob_public_key)
+        alice_shared_key = redcom.ECC_exchange(alice_private_key, bob_public_key)
         print("\nShared secret from Alice:", tostring(alice_shared_key))
 
         if tostring(bob_shared_key) == tostring(alice_shared_key) then
@@ -235,11 +235,11 @@ while true do
             if message ~= "" then
                 term.setTextColor(colors.yellow)
                 -- Encrypt the message --
-                encrypted_msg = redCom.ECC_encrypt(message, bob_shared_key)
+                encrypted_msg = redcom.ECC_encrypt(message, bob_shared_key)
                 print("\nEncrypted message: " .. tostring(encrypted_msg))
 
                 -- Decrypt the message --
-                decrypted_msg = redCom.ECC_decrypt(encrypted_msg, alice_shared_key)
+                decrypted_msg = redcom.ECC_decrypt(encrypted_msg, alice_shared_key)
                 print("Decrypted message: " .. tostring(decrypted_msg))
 
                 -- Compare the decrypted message with the original one --
@@ -264,7 +264,7 @@ while true do
         term.clear()
         term.setCursorPos(1,1)
 
-        local orig_uid = redCom.generate_uid()
+        local orig_uid = redcom.generate_uid()
         local base4_uid = utils.convertHexStringToBytesArray(orig_uid)
         local base8_uid = utils.convertBytesArrayToHexString(base4_uid)
 
@@ -325,7 +325,7 @@ while true do
         print_msg()
     elseif choice == "exit" then
         -- Exit --
-        redCom.close(135)
+        redcom.close(135)
 
         term.clear()
         local w = term.getSize()

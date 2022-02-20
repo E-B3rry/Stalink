@@ -1,7 +1,7 @@
 --- =======================
 --- Path Interpreter Class
 --- =======================
-print("Path System Loaded")
+
 -- Declaration as a Class
 
 function PathInit()
@@ -331,3 +331,6 @@ function Waypoint()
 end
 
 -- Path retracing functions
+
+
+print("Path System Loaded")

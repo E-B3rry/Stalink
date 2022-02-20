@@ -1,5 +1,5 @@
 local mainPath = fs.open("/mainPath.dat", "r")
-mPath = mainPath.readLine() .. "turtle/utilities/mining/pathSystem"
+mPath = mainPath.readLine() .. "turtle/utilities/mining/path_system.lua"
 os.loadAPI(mPath)
 fs.close(mainPath)
 
