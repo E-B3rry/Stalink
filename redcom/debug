@@ -79,7 +79,25 @@ while true do
             print("\nEnter the recipient UID: ")
             local recipient = read()
 
-            redCom.sendUDP(135, recipient, data, nil, nil)
+            redCom.send_udp(135, recipient, data, nil, nil)
+
+            print("Data sent me boi!\n")
+        end
+    elseif choice == "tcp_send" then
+        term.clear()
+        term.setCursorPos(1,1)
+
+        print("Your own UID: " .. redCom.get_my_uid())
+
+        while true do
+            -- Send data --
+            print("\n\nEnter the data to be sent: ")
+            local data = read()
+
+            print("\nEnter the recipient UID: ")
+            local recipient = read()
+
+            redCom.send_tcp(135, recipient, data, nil, nil)
 
             print("Data sent me boi!\n")
         end

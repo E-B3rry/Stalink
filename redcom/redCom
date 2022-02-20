@@ -2,33 +2,40 @@
 
 --- RedCom-based communication system explained:
 --- RedCom layer
--- Bytes array: {
+-- Bytes array: (168 bits) {
 --   checksum: CRC32 - 32 bits
---   flags: 8 bits
+--   src: 64 bits uid
+--   dest: 64 bits uid
+--   flags: 8 bits word
 --     1st & 2nd bits: (udp, tcp, tunnel, redauth)
 --     3rd & 4th bits: (raw, asymmetric encryption, symmetric encryption, both)
 --     5th & 6th bits: (unsigned, signed)
 --     6th-8th bits: (nil)
---   src: 64 bits uid
---   dest: 64 bits uid
 --   data: (undefined length)
 -- }
 
 --- TCP protocol
--- RedCom layer +
--- TCP bytes array: {
---   flags: 8 bits (8 booleans)
---     1st bit: FIN,
+---   > The current implementation of the TCP protocol doesn't have a window size word in the header,
+---   it also doesn't have a checksum as the redcom header already has a checksum.
+---   > No TCP options are supported for now.
+-- RedCom layer (168 bits) +
+-- TCP bytes array (96 bits - 3 bytes): {
+--   seq: 32 bits word
+--   ack: 32 bits word
+--   flags: 16 bits word (8 booleans, 4 empty bits and 4 bits data offset)
+--     1st bit: FIN
 --     2nd bit: SYN,
 --     3rd bit: RST,
 --     4th bit: PSH,
 --     5th bit: ACK,
 --     6th bit: URG,
---     7th bit: ECN-Echo,
---     8th bit: CWR
---  seq: 32 unsigned bits
---  ack: 32 unsigned bits
---  data: undefined length
+--     7th bit: ECE,
+--     8th bit: CWR,
+--     9th to 12th bits: reserved,
+--     13st to 16th bits: data offset (4 bits word, representing number of 32 bits words before the data),
+--   urgent pointer: 16 bits word
+--   options: nil (will be added later)
+--   data: (undefined length)
 -- }
 
 --- UDP protocol
@@ -46,7 +53,7 @@
 --- RedAuth protocol
 -- RedCom layer +
 -- RedAuth bytes array: {
---   flags: 8 bits (8 booleans)
+--   flags: 8 bits word (8 booleans)
 --     1st bit: ASK,
 --     2nd bit: KNOWN,
 --     3rd bit: RENEW,
@@ -72,6 +79,18 @@ local __USABLE_RANGE__ = {0, 65532}
 
 -- Set local variables (Reworking)
 local ids_table = {}
+-- TODO: Create the configuration utility for RedCom
+local settings = {
+    ["tcp"] = {
+        ["max_packet_size"] = 1024,
+        ["tcp keepalive-timeout"] = 60, -- delay in seconds after which keepalive packets are sent
+        ["ensure_opened_reply_channel"] = 1 -- 0: do nothing, 1: open the replyChannel, 2: throw an error
+    },
+    ["other"] = {
+        ["available_sides"] = {"left", "right", "top", "bottom", "front", "back"}, -- Order impact priority
+        ["debug"] = true
+    }
+}
 
 local meetingChannel = 0 -- Being replaced by a list of listened channels for tunneling
 local meetingPrivateKey = nil
@@ -84,17 +103,15 @@ local channelsListened = {}
 
 local tunnels = {}
 local isAcceptingTunneling = false
-
 local lastTunnelID = 0;
 
-local redComSides = {
-    ["left"] = {},
-    ["right"] = {},
-    ["top"] = {},
-    ["bottom"] = {},
-    ["front"] = {},
-    ["back"] = {}
-}
+local tcpConnections = {}
+local lastTCPID = 0
+
+local redComSides = {}
+for i = 1, #settings["other"]["available_sides"] do
+    redComSides[settings["other"]["available_sides"][i]] = {}
+end
 
 
 --- API's functions
@@ -172,12 +189,12 @@ function receive()
         return nil
     end
 
-    local redcom_flags = data:sub(1, 1):byte()
+    local src_uid = data:sub(1, 8)
+    local dest_uid = data:sub(9, 16)
+
+    local redcom_flags = data:sub(17, 17):byte()
     local redcom_protocol = bit.band(redcom_flags, 0x03)
     local redcom_encryption = bit.band(bit.blshift(redcom_flags, 2), 0x0C)
-
-    local src_uid = data:sub(2, 9)
-    local dest_uid = data:sub(10, 17)
 
     if dest_uid ~= ids_table["self"] then
         print("Info: Not the targeted recipient")
@@ -256,13 +273,31 @@ function receiveRaw()
 end
 
 
--- Send messages to established connections
-function sendTCP(recipient, msg)
-    local flags = 0x01
+-- Handle all the ongoing TCP connections
+function handle_tcp_connections()
+    for key, _ in pairs(tcpConnections) do
+        -- Send the first handshake packet
+        if tcpConnections[key]["status"] == 0 then
+            -- Set SEQ number
+            tcpConnections[key]["seqNumber"] = math.random(0xFFFFFFFF)
+            tcpConnections[key]["initSeqNumber"] = tcpConnections[key]["seqNumber"]
+
+            -- Generate the headers
+            local data = generate_redcom_header(recipient, 1, 0, 0)
+            data = data .. generate_tcp_header(
+                    false, true, false, false, false, false, false, false,
+                    tcpConnections[key]["seqNumber"], nil, nil)
+
+            -- Send the packet
+            send_raw(tcpConnections[key]["channel"], tcpConnections[key]["replyChannel"], data, tcpConnections[key]["side"])
+        end
+    end
 end
 
 
-function sendUDP(channel, recipient, msg, replyChannel, side)
+-- Send messages to established connections
+function send_tcp(channel, recipient, msg, replyChannel, side)
+    -- Validate channel and replyChannel
     if channel == nil then
         error("Channel number isn't specified", 2)
     elseif channel < __USABLE_RANGE__[1] or channel > __USABLE_RANGE__[2] then
@@ -275,6 +310,21 @@ function sendUDP(channel, recipient, msg, replyChannel, side)
         error("Reply channel number must be between " .. tostring(__USABLE_RANGE__[1]) .. " and " .. tostring(__USABLE_RANGE__[2]) .. " or nil", 2)
     end
 
+    if settings["tcp"]["ensure_opened_reply_channel"] == 2 then
+        if not isOpen(replyChannel, side) then
+            if side then
+                error("Reply channel " .. tostring(replyChannel) .. " must be opened on specified side: " .. side, 2)
+            else
+                error("Reply channel " .. tostring(replyChannel) .. " must be opened", 2)
+            end
+        end
+    elseif settings["tcp"]["ensure_opened_reply_channel"] == 1 then
+        if not isOpen(replyChannel, side) then
+            open(replyChannel, side)
+        end
+    end
+
+    -- Validate recipient UID
     if recipient == nil then
         error("Recipient UID isn't specified", 2)
     elseif type(recipient) == "string" then
@@ -287,14 +337,98 @@ function sendUDP(channel, recipient, msg, replyChannel, side)
         error("Recipient UID must be a 8-bytes bin or 16 chars hex string", 2)
     end
 
-    -- Create RedCom UDP packet
-    local flags = 0 -- TODO: Allow for encryption flags
-    local data = string.char(flags) .. ids_table["self"] .. recipient .. msg
+    -- Create TCP connection
+    tcpConnections[next_tcp_id()] = {
+        ["channel"] = channel,
+        ["replyChannel"] = replyChannel,
+        ["side"] = side,
+        ["recipient"] = recipient,
+        ["data"] = msg,
+        ["sending"] = true,
+        ["status"] = 0,
+        ["last_communication"] = os.clock()
+    }
 
-    -- CRC32 checksum
-    data = CRC32(data)
+    handle_tcp_connections()
+end
 
-    sendRaw(channel, replyChannel, data, side)
+
+function send_udp(channel, recipient, msg, replyChannel, side)
+    -- Validate channel and replyChannel
+    if channel == nil then
+        error("Channel number isn't specified", 2)
+    elseif channel < __USABLE_RANGE__[1] or channel > __USABLE_RANGE__[2] then
+        error("Channel number must be between " .. tostring(__USABLE_RANGE__[1]) .. " and " .. tostring(__USABLE_RANGE__[2]), 2)
+    end
+
+    if replyChannel == nil then
+        replyChannel = channel
+    elseif replyChannel < __USABLE_RANGE__[1] or replyChannel > __USABLE_RANGE__[2] then
+        error("Reply channel number must be between " .. tostring(__USABLE_RANGE__[1]) .. " and " .. tostring(__USABLE_RANGE__[2]) .. " or nil", 2)
+    end
+
+    -- Validate recipient UID
+    if recipient == nil then
+        error("Recipient UID isn't specified", 2)
+    elseif type(recipient) == "string" then
+        if #recipient == 16 then
+            recipient = utils.convertHexStringToBytesArray(recipient)
+        elseif #recipient ~= 8 then
+            error("Recipient UID must be a 8-bytes bin or 16 chars hex string", 2)
+        end
+    else
+        error("Recipient UID must be a 8-bytes bin or 16 chars hex string", 2)
+    end
+
+    -- Create RedCom header & UDP packet
+    local data = generate_redcom_header(recipient, 0, 0, 0) .. msg
+
+    send_raw(channel, replyChannel, CRC32(data), side)
+end
+
+
+-- Ease the generation of RedCom header
+function generate_redcom_header(recipient, protocol, encryption, signed)
+    -- Validate parameters
+    if protocol < 0 or protocol > 3 then
+        protocol = 0
+    end
+
+    if encryption < 0 or encryption > 3 then
+        encryption = 0
+    end
+
+    if signed < 0 or signed > 1 then
+        signed = 0
+    end
+
+    local flags = protocol
+    -- TODO: Support encryption and signature flags
+
+    return ids_table["self"] .. recipient .. string.char(flags)
+end
+
+
+-- Ease the generation of TCP header
+function generate_tcp_header(FIN, SYN, RST, PSH, ACK, URG, ECE, CWR, sequenceNumber, acknowledgmentNumber, urgentPointer)
+    local flags = 0
+
+    -- Add the flags
+    if FIN then flags = flags + 1 end
+    if SYN then flags = flags + 2 end
+    if RST then flags = flags + 4 end
+    if PSH then flags = flags + 8 end
+    if ACK then flags = flags + 16 end
+    if URG then flags = flags + 32 end
+    if ECE then flags = flags + 64 end
+    if CWR then flags = flags + 128 end
+
+    -- Add the data offset
+    local data_offset = 3  -- (32 bits words); Fixed for now, as we don't support options
+    flags = flags + bit.blshift(data_offset, 12)
+
+    -- Return the header
+    return utils.convert32BitsToString(sequenceNumber) .. utils.convert32BitsToString(acknowledgmentNumber) .. string.char(flags) .. utils.convert16BitsToString(urgentPointer)
 end
 
 
@@ -316,7 +450,7 @@ end
 
 
 -- Send raw data
-function sendRaw(channel, replyChannel, data, side)
+function send_raw(channel, replyChannel, data, side)
   if not side then
     side = getWorkingModemSide()
 
@@ -340,7 +474,7 @@ function isOpen(channel, sides)
   if type(sides) == "string" then
     sides = {sides}
   elseif type(sides) ~= "table" then
-    sides = {"left", "right", "up", "down", "front", "back"}
+    sides = settings["other"]["available_sides"]
   end
 
   for i = 0, #sides do
@@ -446,6 +580,7 @@ function open(channels, side)
     return true
 end
 
+
 function close(channels)
     -- TODO: Close any tunnels that are using the channels
 
@@ -483,9 +618,16 @@ function close(channels)
 end
 
 
-function generateNewConnectionID()
-    last = lastTunnelID
+function next_tunnel_id()
+    local last = lastTunnelID
     lastTunnelID = lastTunnelID + 1
+    return last
+end
+
+
+function next_tcp_id()
+    local last = lastTCPID
+    lastTCPID = lastTCPID + 1
     return last
 end
 
