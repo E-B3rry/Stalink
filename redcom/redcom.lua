@@ -69,7 +69,7 @@
 os.unloadAPI("rednet")
 
 local mainPath = fs.open("/mainPath.dat", "r")
-A = mainPath.readLine()
+local A = mainPath.readLine()
 mainPath.close()
 
 os.loadAPI(A .. "utilities/ecc.lua")
@@ -96,11 +96,7 @@ local settings = {
 local meetingChannel = 0 -- Being replaced by a list of listened channels for tunneling
 local meetingPrivateKey = nil
 
-local channelsListened = {}
---- Table for each listened channels ---
--- First param is the uuid of the other device
--- Second param is the channel
--- Third param is the shared key
+local packetsQueue = {}
 
 local tunnels = {}
 local isAcceptingTunneling = false
@@ -168,10 +164,14 @@ end
 
 
 -- Main run function
-function run_as_coroutine()
+local isRunning = false
+function run_parallel()
+    if isRunning then return "Already running" end
+    isRunning = true
+
     while true do
-        -- Add the receiving mechanism here (and make sure to yield)
-        handle_tcp_connections()
+        table.insert(packetsQueue, async_fetch_modem_event())
+        --handle_tcp_connections()  -- Not ready yet
     end
 end
 
@@ -185,17 +185,23 @@ end
 
 -- Receive function
 function receive()
-    local channel, replyChannel, data, distance = receiveRaw()
+    if isRunning then coroutine.yield() os.startTimer(0.15) end
 
-    if not data then
+    local packet = table.remove(packetsQueue, 1)
+
+    if not packet then
         return nil
     end
+
+    local channel, replyChannel, data, distance = table.unpack(packet)
 
     -- CRC32 checksum
     if CRC32_checksum_validation(data) then
         data = data:sub(5)
     else
-        print("Info: CRC32 checksum error")
+        if settings["other"]["debug"] then
+            print("[RedCom] Packet dropped: CRC32 checksum error")
+        end
         return nil
     end
 
@@ -207,7 +213,9 @@ function receive()
     local redcom_encryption = bit.band(bit.blshift(redcom_flags, 2), 0x0C)
 
     if dest_uid ~= ids_table["self"] then
-        print("Info: Not the targeted recipient")
+        if settings["other"]["debug"] then
+            print("[RedCom] Packet dropped: destination UID mismatch")
+        end
         return nil
     end
 
@@ -241,8 +249,32 @@ function receive()
 end
 
 
--- Raw receive function
-function receiveRaw()
+-- Work with parallel API
+function async_fetch_modem_event()
+    -- Pulling event from os queue and unpack all the arguments
+    local _, s, channel, replyChannel, data, distance = os.pullEvent("modem_message")
+
+    -- If the receiving channel is not registered as opened on the receiving side then ignore
+    if not isOpen(tonumber(channel), s) then
+        print("Blobby must have fucked up there...\nThe channel " .. channel .. " is not registered as opened on " .. s .. " side, but it is receiving data from it.")
+        return nil
+    end
+
+    if settings["other"]["debug"] then
+        print("[RedCom] Received packet from " .. s .. " side on channel " .. channel .. ":")
+        if type(data) == "string" then
+            print(tostring(data))
+        else
+            print("Empty packet")
+        end
+    end
+
+    return {channel, replyChannel, data, distance}
+end
+
+
+-- Function to fetch the modem_message event
+function sync_fetch_modem_event()
     -- Pulling event from os queue (Using a specific way so that os.pullEvent doesn't block the program)
     local timer = os.startTimer(0.15)
     local eventTable = table.pack(os.pullEvent())
@@ -260,16 +292,15 @@ function receiveRaw()
         return nil
     end
 
-    -- Unpack all the arguments and work with them
-    local e, s, channel, replyChannel, data, distance = table.unpack(eventTable)
+    -- Unpack all the arguments
+    local _, s, channel, replyChannel, data, distance = table.unpack(eventTable)
 
-    if data then
+    if settings["other"]["debug"] then
+        print("[RedCom] Received packet from " .. s .. " side on channel " .. channel .. ":")
         if type(data) == "string" then
-            --print("Message : " .. tostring(msg))
+            print(tostring(data))
         else
-            for key, item in pairs(data) do
-                print(tostring(key) .. " - " .. tostring(item))
-            end
+            print("Empty packet")
         end
     end
 
