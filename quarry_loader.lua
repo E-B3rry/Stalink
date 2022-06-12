@@ -1,11 +1,11 @@
-if not mainPath then
+if not stalinkRoot then
   local mainPathHandler = fs.open("/mainPath.dat", "r")
-  mainPath = mainPathHandler.readLine()
+  stalinkRoot = mainPathHandler.readLine()
   mainPathHandler.close()
 end
 
-if not mainPath then
+if not stalinkRoot then
   error("Cannot read mainPath file")
 end
 
-os.loadAPI(mainPath .. "turtle/quarry_mining/auto_quarry.lua")
+os.loadAPI(stalinkRoot .. "turtle/quarry_mining/auto_quarry.lua")

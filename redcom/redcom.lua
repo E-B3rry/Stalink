@@ -9,7 +9,7 @@
 --   flags: 8 bits word
 --     1st & 2nd bits: (udp, tcp, tunnel, redauth)
 --     3rd & 4th bits: (raw, asymmetric encryption, symmetric encryption, both)
---     5th & 6th bits: (unsigned, signed)
+--     5th bit: (unsigned, signed)
 --     6th-8th bits: (nil)
 --   data: (undefined length)
 -- }
@@ -65,7 +65,7 @@
 --   public_key: 168 bits
 
 -- ! TODO: Rework the API loading system
---- Load APIs and set constants --
+--- (Un)load APIs and set constants --
 os.unloadAPI("rednet")
 
 local mainPath = fs.open("/mainPath.dat", "r")
@@ -77,18 +77,29 @@ os.loadAPI(A .. "utilities/ecc.lua")
 -- Define constants
 local __USABLE_RANGE__ = {0, 65532}
 
+
 -- Set local variables (Reworking)
 local ids_table = {}
 -- TODO: Create the configuration utility for RedCom
 local settings = {
     ["tcp"] = {
         ["max_packet_size"] = 1024,
-        ["tcp keepalive-timeout"] = 60, -- delay in seconds after which keepalive packets are sent
-        ["ensure_opened_reply_channel"] = 1 -- 0: do nothing, 1: open the replyChannel, 2: throw an error
+        ["tcp_keepalive_timeout"] = 60,  -- delay in seconds after which keepalive packets are sent
+        ["ensure_opened_reply_channel"] = 1  -- 0: do nothing, 1: open the replyChannel, 2: throw an error
+    },
+    ["udp"] = {
+
     },
     ["other"] = {
-        ["available_sides"] = {"left", "right", "top", "bottom", "front", "back"}, -- Order impact priority
-        ["coroutine_yield_more"] = false,
+        ["available_sides"] = {"left", "right", "top", "bottom", "front", "back"},  -- Order impacts priority
+        -- TODO: Implement the max queue size and behavior
+        ["awaiting_processing_queue_size"] = 128,
+        ["incoming_packets_queue_size"] = 256,
+        ["outgoing_packets_queue_size"] = 256,
+        ["behavior_on_full_processing_queue"] = "wait",  -- Wait in the incoming queue until there is no more space
+        ["behavior_on_full_incoming_queue"] = "drop",  -- Either drop the new packet or overwrite the oldest packet
+        ["behavior_on_full_outgoing_queue"] = "error",  -- Either return an error or overwrite the oldest packet
+        ["coroutine_yield_more"] = false,  -- If true redcom tries to yield more often, thus suspending itself ofter
         ["debug"] = true
     }
 }
@@ -96,7 +107,9 @@ local settings = {
 local meetingChannel = 0 -- Being replaced by a list of listened channels for tunneling
 local meetingPrivateKey = nil
 
-local packetsQueue = {}
+local packetsInQueue = {}
+local msgWaitingQueue = {}
+local packetsOutQueue = {}
 
 local tunnels = {}
 local isAcceptingTunneling = false
@@ -114,7 +127,7 @@ end
 --- API's functions
 
 
--- 64 bits uid (60 bits being random, likely unique)
+-- 64 bits uid (60 bits being random, very likely unique)
 -- TODO: Optimize and return a 64 bits blob, with another function that easily converts to viewable string
 function generate_uid()
     local hex_chars = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'}
@@ -169,8 +182,9 @@ function run_parallel()
     if isRunning then return "Already running" end
     isRunning = true
 
-    while true do
-        table.insert(packetsQueue, async_fetch_modem_event())
+    while isRunning do
+        table.insert(packetsInQueue, async_fetch_modem_event())
+        process_packets()
         --handle_tcp_connections()  -- Not ready yet
     end
 end
@@ -183,68 +197,102 @@ function save_data()
 end
 
 
+-- Process packet function
+function process_packets(limit)
+    if type(limit) ~= "number" then limit = 1 end  -- Ensure blocking parameter is a boolean
+
+    for i = 1, limit do
+        repeat  -- Workaround to have a continue statement for the for loop (using: `do break end`)
+            if #packetsInQueue > 0 then
+                local packet = table.remove(packetsInQueue, 1)
+
+                if not packet then
+                    do break end
+                end
+
+                local channel, replyChannel, data, distance = table.unpack(packet)
+
+                -- CRC32 checksum
+                if CRC32_checksum_validation(data) then
+                    data = data:sub(5)
+                else
+                    if settings["other"]["debug"] then
+                        print("[RedCom] Packet dropped: CRC32 checksum error")
+                    end
+                    do break end
+                end
+
+                local src_uid = data:sub(1, 8)
+                local dest_uid = data:sub(9, 16)
+
+                local redcom_flags = data:sub(17, 17):byte()
+                local redcom_protocol = bit.band(redcom_flags, 0x03)
+                local redcom_encryption = bit.band(bit.blshift(redcom_flags, 2), 0x0C)
+
+                if dest_uid ~= ids_table["self"] then
+                    if settings["other"]["debug"] then
+                        print("[RedCom] Packet dropped: destination UID mismatch")
+                    end
+                    do break end
+                end
+
+                local redcom_data = data:sub(18)
+
+                if redcom_protocol == 0 then
+                    -- UDP protocol
+
+                    table.insert(msgWaitingQueue,{
+                        ["protocol"] = "udp",
+                        ["src"] = src_uid,
+                        ["is_src_approved"] = false, -- TODO: Implement
+                        ["content"] = redcom_data,
+                        ["distance"] = distance,
+                        ["channel"] = channel,
+                        ["reply_channel"] = replyChannel
+                    })
+                    do break end
+                elseif redcom_protocol == 1 then
+                    -- TCP protocol
+
+                    -- TODO: Implement
+                    do break end
+                elseif redcom_protocol == 2 then
+                    -- Tunnel protocol
+
+                    -- TODO: Implement
+                    do break end
+                elseif redcom_protocol == 3 then
+                    -- RedAuth protocol
+
+                    -- TODO: Implement
+                    do break end
+                end
+            else
+                do break end
+            end
+
+            do break end
+        until true
+    end
+end
+
+
 -- Receive function
-function receive()
-    if isRunning then coroutine.yield() os.startTimer(0.15) end
+function receive(blocking)
+    if isRunning then coroutine.yield() end
 
-    local packet = table.remove(packetsQueue, 1)
+    if type(blocking) ~= "boolean" then blocking = true end  -- Ensure blocking parameter is a boolean
 
-    if not packet then
-        return nil
-    end
-
-    local channel, replyChannel, data, distance = table.unpack(packet)
-
-    -- CRC32 checksum
-    if CRC32_checksum_validation(data) then
-        data = data:sub(5)
-    else
-        if settings["other"]["debug"] then
-            print("[RedCom] Packet dropped: CRC32 checksum error")
+    if #msgWaitingQueue > 0 then
+        local msg = table.remove(msgWaitingQueue, 1)
+        return msg
+    elseif blocking then
+        while #msgWaitingQueue == 0 do
+            if isRunning then coroutine.yield() end
         end
-        return nil
-    end
 
-    local src_uid = data:sub(1, 8)
-    local dest_uid = data:sub(9, 16)
-
-    local redcom_flags = data:sub(17, 17):byte()
-    local redcom_protocol = bit.band(redcom_flags, 0x03)
-    local redcom_encryption = bit.band(bit.blshift(redcom_flags, 2), 0x0C)
-
-    if dest_uid ~= ids_table["self"] then
-        if settings["other"]["debug"] then
-            print("[RedCom] Packet dropped: destination UID mismatch")
-        end
-        return nil
-    end
-
-    local redcom_data = data:sub(18)
-
-    if redcom_protocol == 0 then
-        -- UDP protocol
-
-        return {
-            ["protocol"] = "udp",
-            ["src"] = src_uid,
-            ["is_src_approved"] = false, -- TODO: Implement
-            ["content"] = redcom_data,
-            ["distance"] = distance,
-            ["channel"] = channel,
-            ["reply_channel"] = replyChannel
-        }
-    elseif redcom_protocol == 1 then
-        -- TCP protocol
-
-        -- TODO: Implement
-    elseif redcom_protocol == 2 then
-        -- Tunnel protocol
-
-        -- TODO: Implement
-    elseif redcom_protocol == 3 then
-        -- RedAuth protocol
-
-        -- TODO: Implement
+        local msg = table.remove(msgWaitingQueue, 1)
+        return msg
     end
 end
 
@@ -252,11 +300,19 @@ end
 -- Work with parallel API
 function async_fetch_modem_event()
     -- Pulling event from os queue and unpack all the arguments
-    local _, s, channel, replyChannel, data, distance = os.pullEvent("modem_message")
+    local evtType, s, channel, replyChannel, data, distance = os.pullEvent("modem_message")
+
+    if evtType ~= "modem_message" then
+        return nil
+    end
+
+    print("debug event:", evtType, s, channel, replyChannel, data, distance)
 
     -- If the receiving channel is not registered as opened on the receiving side then ignore
     if not isOpen(tonumber(channel), s) then
-        print("Blobby must have fucked up there...\nThe channel " .. channel .. " is not registered as opened on " .. s .. " side, but it is receiving data from it.")
+        if settings["other"]["debug"] then
+            print("[RedCom] Packet dropped: channel " .. channel .. " not registered as opened in redcom on side " .. s)
+        end
         return nil
     end
 
@@ -318,26 +374,64 @@ end
 function handle_tcp_connections()
     for key, _ in pairs(tcpConnections) do
         -- Send the first handshake packet
-        if tcpConnections[key]["status"] == 0 then
-            -- Set SEQ number
-            tcpConnections[key]["seqNumber"] = math.random(0xFFFFFFFF)
-            tcpConnections[key]["initSeqNumber"] = tcpConnections[key]["seqNumber"]
+        if tcpConnections[key]["status"] == "syn" then
+            -- Randomly set SEQ and ACK numbers
+            tcpConnections[key]["seqOffest"] = math.random(0xFFFFFFFF)
+            tcpConnections[key]["seq"] = tcpConnections[key]["seqOffest"]
 
             -- Generate the headers
-            local data = generate_redcom_header(recipient, 1, 0, 0)
+            local data = generate_redcom_header(tcpConnections[key]["recipient"], 1, 0, 0)
             data = data .. generate_tcp_header(
                     false, true, false, false, false, false, false, false,
-                    tcpConnections[key]["seqNumber"], nil, nil)
+                    tcpConnections[key]["seq"], nil, nil)
 
             -- Send the packet
-            send_raw(tcpConnections[key]["channel"], tcpConnections[key]["replyChannel"], data, tcpConnections[key]["side"])
+            send_raw(tcpConnections[key]["channel"], tcpConnections[key]["replyChannel"], CRC32(data), tcpConnections[key]["side"])
+
+            tcpConnections[key]["status"] = "handshaking"
+            tcpConnections[key]["seq"] = tcpConnections[key]["seqOffset"] + 1
+        elseif tcpConnections[key]["status"] == "synack" then
+            -- Randomly set SEQ number and increment the ACK number
+            tcpConnections[key]["seqOffest"] = math.random(0xFFFFFFFF)
+            tcpConnections[key]["seq"] = tcpConnections[key]["seqOffest"]
+            tcpConnections[key]["ack"] = tcpConnections[key]["ack"] + 1
+
+            -- Generate the headers
+            local data = generate_redcom_header(tcpConnections[key]["recipient"], 1, 0, 0)
+            data = data .. generate_tcp_header(
+                    false, true, false, false, true, false, false, false,
+                    tcpConnections[key]["seq"], tcpConnections[key]["ack"], nil)
+
+            -- Send the packet
+            send_raw(tcpConnections[key]["channel"], tcpConnections[key]["replyChannel"], CRC32(data), tcpConnections[key]["side"])
+
+            tcpConnections[key]["status"] = "handshaking"
+            tcpConnections[key]["seq"] = tcpConnections[key]["seqOffset"] + 1
+        elseif tcpConnections[key]["status"] == "ack" then
+            -- Increment ACK number
+            tcpConnections[key]["ack"] = tcpConnections[key]["ack"] + 1
+
+            -- Generate the headers
+            local data = generate_redcom_header(tcpConnections[key]["recipient"], 1, 0, 0)
+            data = data .. generate_tcp_header(
+                    false, false, false, false, true, false, false, false,
+                    nil, tcpConnections[key]["ack"], nil)
+
+            -- Send the packet
+            send_raw(tcpConnections[key]["channel"], tcpConnections[key]["replyChannel"], CRC32(data), tcpConnections[key]["side"])
+
+            tcpConnections[key]["status"] = "waiting"
+        elseif tcpConnections[key]["status"] == "waiting" then
+        elseif tcpConnections[key]["status"] == "sending" then
+        elseif tcpConnections[key]["status"] == "receiving" then
+        elseif tcpConnections[key]["status"] == "terminating" then
         end
     end
 end
 
 
 -- Send messages to established connections
-function send_tcp(channel, recipient, msg, replyChannel, side)
+function send_tcp(channel, recipient, msg, blocking, side)
     -- Validate channel and replyChannel
     if channel == nil then
         error("Channel number isn't specified", 2)
@@ -379,18 +473,31 @@ function send_tcp(channel, recipient, msg, replyChannel, side)
     end
 
     -- Create TCP connection
-    tcpConnections[next_tcp_id()] = {
+    local tcp_id = next_tcp_id()
+    tcpConnections[tcp_id] = {
         ["channel"] = channel,
         ["replyChannel"] = replyChannel,
         ["side"] = side,
         ["recipient"] = recipient,
         ["data"] = msg,
         ["sender"] = true,
-        ["status"] = 0,
-        ["last_communication"] = os.clock()
+        ["status"] = "syn",
+        ["ack"] = 0,
+        ["seq"] = 0,
+        ["seqOffset"] = 0,
+        ["last_communication"] = -1
     }
 
-    handle_tcp_connections()
+    if blocking then
+        -- TODO: Replace this with a function to fetch the status of a current or past TCP packet
+        while tcpConnections[tcp_id]["status"] ~= "done" or tcpConnections[tcp_id]["status"] ~= "failed" or tcpConnections[tcp_id]["status"] ~= "timed_out" do
+            coroutine.yield()
+        end
+
+        return tcpConnections[tcp_id]["status"]
+    end
+
+    return tcp_id
 end
 
 
@@ -466,10 +573,42 @@ function generate_tcp_header(FIN, SYN, RST, PSH, ACK, URG, ECE, CWR, sequenceNum
 
     -- Add the data offset
     local data_offset = 3  -- (32 bits words); Fixed for now, as we don't support options
-    flags = flags + bit.blshift(data_offset, 12)
+    local offset = bit.blshift(data_offset, 4)
 
     -- Return the header
-    return utils.convert32BitsToString(sequenceNumber) .. utils.convert32BitsToString(acknowledgmentNumber) .. string.char(flags) .. utils.convert16BitsToString(urgentPointer)
+    return utils.convert32BitsToString(sequenceNumber) .. utils.convert32BitsToString(acknowledgmentNumber) .. string.char(offset) .. string.char(flags) .. utils.convert16BitsToString(urgentPointer)
+end
+
+
+-- Ease the decoding of TCP header
+function decode_tcp_header(data)
+    local header = {}
+
+    -- Get the sequence number
+    header["sequenceNumber"] = utils.convertStringTo32Bits(data:sub(1, 4))
+
+    -- Get the acknowledgment number
+    header["acknowledgmentNumber"] = utils.convertStringTo32Bits(data:sub(5, 8))
+
+    -- Get the flags and separate it
+    local flags = string.byte(data:sub(10, 10))
+    header["FIN"] = bit.band(flags, 1) ~= 0
+    header["SYN"] = bit.band(flags, 2) ~= 0
+    header["RST"] = bit.band(flags, 4) ~= 0
+    header["PSH"] = bit.band(flags, 8) ~= 0
+    header["ACK"] = bit.band(flags, 16) ~= 0
+    header["URG"] = bit.band(flags, 32) ~= 0
+    header["ECE"] = bit.band(flags, 64) ~= 0
+    header["CWR"] = bit.band(flags, 128) ~= 0
+
+    -- Get the data offset
+    local offset = string.byte(data:sub(9, 9))
+    header["dataOffset"] = bit.brshift(offset, 4)
+
+    -- Get the urgent pointer
+    header["urgentPointer"] = utils.convertStringTo16Bits(data:sub(11, 12))
+
+    return header
 end
 
 

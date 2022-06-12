@@ -1,7 +1,7 @@
 -- Load APIs and set constants --
 local mainPath = fs.open("/mainPath.dat", "r")
-A = mainPath.readLine()
-os.loadAPI(A .. "redcom/redcom.lua")
+root = mainPath.readLine()
+os.loadAPI(root .. "redcom/redcom.lua")
 mainPath.close()
 
 MEETING_CHANNEL = 65135

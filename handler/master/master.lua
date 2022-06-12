@@ -1,11 +1,11 @@
 -- Load APIs --
 local mainPath = fs.open("/mainPath.dat", "r")
 
-A = mainPath.readLine()
-os.loadAPI(A .. "turtle/utilities/mining/path_system.lua")
-os.loadAPI(A .. "turtle/quarry_mining/quarry_mining.lua")
-os.loadAPI(A .. "handler/utilities/requestUtils.lua")
-os.loadAPI(A .. "redcom/redcom.lua")
+root = mainPath.readLine()
+os.loadAPI(root .. "turtle/utilities/mining/path_system.lua")
+os.loadAPI(root .. "turtle/quarry_mining/quarry_mining.lua")
+os.loadAPI(root .. "handler/utilities/requestUtils.lua")
+os.loadAPI(root .. "redcom/redcom.lua")
 
 mainPath.close()
 

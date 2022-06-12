@@ -1,4 +1,4 @@
---- Emulator startup file (Automatically updated via artifact at every emulator start)
+--- Emulator startup file (Automatically updated via artifact task at every emulator start)
 -- Only triggers if the instance is run in the standalone emulator.
 if ccemux then
     local sides = {"left", "right", "front", "back", "top", "bottom"}
@@ -20,5 +20,26 @@ if ccemux then
         posZ = 110,
     })
 
-    print("[CCEMUX] Attached a fake modem to a random side")
+    print("[CCEMUX] Attached a fake modem to a random side and made the computer position random.")
+    os.sleep(1.666)
+end
+
+
+-- Start the main thread
+if fs.exists("/rom/apis/threads") then
+    term.clear()
+    term.setCursorPos(1,1)
+
+    shell.run("/rom/apis/threads")
+elseif fs.exists("/mainPath.dat") then
+    local mainPath = fs.open("/mainPath.dat", "r")
+    root = mainPath.readLine()
+    mainPath.close()
+
+    term.clear()
+    term.setCursorPos(1,1)
+
+    shell.run(root .. "utilities/threadsAPI.lua")
+else
+    print("[ERROR] Could not find the thread API!")
 end

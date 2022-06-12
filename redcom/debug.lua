@@ -1,10 +1,12 @@
 -- Load APIs and set constants --
 local mainPath = fs.open("/mainPath.dat", "r")
-A = mainPath.readLine()
+stalinkRoot = mainPath.readLine()
 mainPath.close()
 
-os.loadAPI(A .. "redcom/redcom.lua")
-os.loadAPI(A .. "utilities/utils.lua")
+os.loadAPI(stalinkRoot .. "redcom/redcom.lua")
+os.loadAPI(stalinkRoot .. "utilities/utils.lua")
+
+os.pullEvent("key")
 
 
 -- Screen cleared and disclaimer --
@@ -15,12 +17,12 @@ print("DISCLAIMER : This is a debug tool, it is not of any use in production.\
 Furthermore, it only allows you to use or test basic functionalities of the redcom API, at least for now.\n")
 term.setTextColor(colors.white)
 
--- Open redcom channel --
-redcom.open(135)
-
 -- Wait for acknowledgement --
 print("\n\nWaiting for keypress...")
 os.pullEvent("key")
+
+-- Open redcom channel --
+redcom.open(135)
 
 -- Help and init message --
 local function print_msg()
@@ -54,7 +56,9 @@ function main()
         print("\n")
 
         if choice == "listen" then
-            print("Your own UID: " .. redcom.get_my_uid())
+            print("Enter the channel to listen: ")
+            local channel = read()
+            print("\nYour own UID: " .. redcom.get_my_uid())
 
             -- Receive data --
 
@@ -74,13 +78,17 @@ function main()
 
             while true do
                 -- Send data --
-                print("\n\nEnter the data to be sent: ")
+                print("\n\nEnter the channel to use: ")
+                local channel = read()
+
+                print("\nEnter the data to be sent: ")
                 local data = read()
 
                 print("\nEnter the recipient UID: ")
                 local recipient = read()
 
-                redcom.send_udp(135, recipient, data, nil, nil)
+                redcom.open(channel)
+                redcom.send_udp(channel, recipient, data, nil, nil)
 
                 print("Data sent me boi!\n")
             end
@@ -88,20 +96,24 @@ function main()
             term.clear()
             term.setCursorPos(1,1)
 
-            print("Your own UID: " .. redcom.get_my_uid())
+            --print("Your own UID: " .. redcom.get_my_uid())
+            --
+            --while true do
+            --    -- Send data --
+            --    print("\n\nEnter the data to be sent: ")
+            --    local data = read()
+            --
+            --    print("\nEnter the recipient UID: ")
+            --    local recipient = read()
+            --
+            --    redcom.send_tcp(135, recipient, data, nil, nil)
+            --
+            --    print("Data sent me boi!\n")
+            --end
 
-            while true do
-                -- Send data --
-                print("\n\nEnter the data to be sent: ")
-                local data = read()
+            term.setTextColor(colors.red)
 
-                print("\nEnter the recipient UID: ")
-                local recipient = read()
-
-                redcom.send_tcp(135, recipient, data, nil, nil)
-
-                print("Data sent me boi!\n")
-            end
+            print("TCP protocol is not supported yet, wait for the next commit.")
         elseif choice == "crc" then
             math.randomseed(os.time())
 
@@ -179,7 +191,7 @@ function main()
             term.setTextColor(colors.white)
 
             print("CRC-32 test results:\n* Total messages: " .. iterations .. " (corrupted: " .. messages_corrupted .. ")\n- Success: " .. success .. "\n- False positive: " .. false_positive .. "\n- False negative: " .. false_negative)
-        elseif choice == "ecc.lua" then
+        elseif choice == "ecc" then
             -- Generate two ECC keypair --
             term.clear()
             term.setCursorPos(1,1)
@@ -352,4 +364,7 @@ function main()
 end
 
 -- Start the program --
-parallel.waitForAny(main, redcom.run_parallel)
+os.startThread(redcom.run_parallel)
+main()
+
+--parallel.waitForAny(main, redcom.run_parallel)
