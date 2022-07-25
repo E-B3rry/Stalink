@@ -343,11 +343,11 @@ function process_packets(limit)
                                     if #tcp_data > 0 then
                                         local relativeAck = tcp_headers["seq"] - tcpConnections[key]["ack_offset"] - 1
 
-                                        local inBefore = tcpConnections[key]["in"]:sub(1, relativeAck - #tcp_data - 1)
-                                        local inAfter = tcpConnections[key]["in"]:sub(relativeAck)
+                                        local inBefore = tcpConnections[key]["in"]:sub(1, relativeAck - 1)
+                                        local inAfter = tcpConnections[key]["in"]:sub(relativeAck + #tcp_data)
                                         tcpConnections[key]["in"] = inBefore .. tcp_data .. inAfter
 
-                                        tcpConnections[key]["ack"] = math.min(tcpConnections[key]["ack"] + #tcp_data, tcp_headers["seq"])
+                                        tcpConnections[key]["ack"] = math.min(tcpConnections[key]["ack"] + #tcp_data, tcp_headers["seq"] + #tcp_data)
                                     else
                                         if settings["tcp"]["debug"] then
                                             print("[RedCom-TCP] Connection " .. key .. " received keepalive")
@@ -698,7 +698,7 @@ function handle_tcp_connections()
                     data = data .. generate_tcp_header(
                             false, false, false, false, false, false, false, false,
                             tcpConnections[key]["recipient_connection_uid"],
-                            tcpConnections[key]["seq"] + payloadLen,
+                            tcpConnections[key]["seq"],
                             nil, nil)
                     data = data .. string.sub(tcpConnections[key]["out"], relativeSeq + 1, relativeSeq + payloadLen)
 
