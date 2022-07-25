@@ -31,15 +31,14 @@ if fs.exists("/rom/apis/threads") then
     term.setCursorPos(1,1)
 
     shell.run("/rom/apis/threads")
-elseif fs.exists("/mainPath.dat") then
-    local mainPath = fs.open("/mainPath.dat", "r")
-    root = mainPath.readLine()
-    mainPath.close()
-
+elseif fs.exists("/stalink-path") then
+    local StalinkInstallationPathFile = fs.open("/stalink-path", "r")
+    StalinkInstallationPath = StalinkInstallationPathFile.readLine()
+    StalinkInstallationPathFile.close()
     term.clear()
     term.setCursorPos(1,1)
 
-    shell.run(root .. "utilities/threadsAPI.lua")
+    shell.run(StalinkInstallationPath .. "utilities/threadsAPI.lua")
 else
     print("[ERROR] Could not find the thread API!")
 end

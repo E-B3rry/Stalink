@@ -1,6 +1,8 @@
 --- =======================
---- Path Interpreter Class
+--- Path Interpreter Class (A class?)
 --- =======================
+
+-- TODO: Path system needs complete rework, it's horribly made.
 
 -- Declaration as a Class
 
@@ -325,7 +327,7 @@ function GoBack(pathObj)
   return pathObj, true, "end"
 end
 
-function Waypoint()
+function Waypoint(pathObj)
   pathObj["pathList"][pathObj["pathListSize"]] = "w"
   pathObj["pathListSize"] = pathObj["pathListSize"] + 1
 end

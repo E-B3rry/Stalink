@@ -1,7 +1,12 @@
-local mainPath = fs.open("/mainPath.dat", "r")
-mPath = mainPath.readLine() .. "turtle/utilities/mining/path_system.lua"
-os.loadAPI(mPath)
-fs.close(mainPath)
+-- Load stalink installation path
+if not StalinkInstallationPath then
+    local StalinkInstallationPathFile = fs.open("/stalink-path", "r")
+    StalinkInstallationPath = StalinkInstallationPathFile.readLine()
+    StalinkInstallationPathFile.close()
+end
+
+os.loadAPI(StalinkInstallationPath .. "turtle/utilities/mining/path_system.lua")
+
 
 local pathObj = pathSystem.PathInit()
 

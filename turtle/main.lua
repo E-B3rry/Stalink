@@ -1,9 +1,12 @@
-local mainPathHandle = fs.open("/mainPath.dat", "r")
-mainPath = mainPathHandle.readLine()
-mainPathHandle.close()
+-- Load stalink installation path
+if not StalinkInstallationPath then
+  local StalinkInstallationPathFile = fs.open("/stalink-path", "r")
+  StalinkInstallationPath = StalinkInstallationPathFile.readLine()
+  StalinkInstallationPathFile.close()
+end
 
-os.loadAPI(mainPath .. "turtle/utilities/inv/inventory.lua")
-os.loadAPI(mainPath .. "turtle/quarry_mining/quarry_mining.lua")
+os.loadAPI(StalinkInstallationPath .. "turtle/utilities/inv/inventory.lua")
+os.loadAPI(StalinkInstallationPath .. "turtle/quarry_mining/quarry_mining.lua")
 
 function RunQuarry(quarryObj)
   if not quarryObj then

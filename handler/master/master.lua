@@ -1,13 +1,16 @@
--- Load APIs --
-local mainPath = fs.open("/mainPath.dat", "r")
+--- Load APIs ---
 
-root = mainPath.readLine()
-os.loadAPI(root .. "turtle/utilities/mining/path_system.lua")
-os.loadAPI(root .. "turtle/quarry_mining/quarry_mining.lua")
-os.loadAPI(root .. "handler/utilities/requestUtils.lua")
-os.loadAPI(root .. "redcom/redcom.lua")
+-- Load stalink installation path
+if not StalinkInstallationPath then
+  local StalinkInstallationPathFile = fs.open("/stalink-path", "r")
+  StalinkInstallationPath = StalinkInstallationPathFile.readLine()
+  StalinkInstallationPathFile.close()
+end
 
-mainPath.close()
+os.loadAPI(StalinkInstallationPath .. "turtle/utilities/mining/path_system.lua")
+os.loadAPI(StalinkInstallationPath .. "turtle/quarry_mining/quarry_mining.lua")
+os.loadAPI(StalinkInstallationPath .. "handler/utilities/requestUtils.lua")
+os.loadAPI(StalinkInstallationPath .. "redcom/redcom.lua")
 
 
 --getmetatable('').__index = function(str,i) return string.sub(str,i,i) end

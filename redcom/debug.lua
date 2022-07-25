@@ -1,10 +1,14 @@
--- Load APIs and set constants --
-local mainPath = fs.open("/mainPath.dat", "r")
-stalinkRoot = mainPath.readLine()
-mainPath.close()
+--- Load APIs and set constants ---
 
-os.loadAPI(stalinkRoot .. "redcom/redcom.lua")
-os.loadAPI(stalinkRoot .. "utilities/utils.lua")
+-- Load stalink installation path
+if not StalinkInstallationPath then
+    local StalinkInstallationPathFile = fs.open("/stalink-path", "r")
+    StalinkInstallationPath = StalinkInstallationPathFile.readLine()
+    StalinkInstallationPathFile.close()
+end
+
+os.loadAPI(StalinkInstallationPath .. "redcom/redcom.lua")
+os.loadAPI(StalinkInstallationPath .. "utilities/utils.lua")
 
 os.pullEvent("key")
 
@@ -57,8 +61,12 @@ function main()
 
         if choice == "listen" then
             print("Enter the channel to listen: ")
-            local channel = read()
-            print("\nYour own UID: " .. redcom.get_my_uid())
+            local channel = tonumber(read())
+            redcom.open(channel)
+
+            term.clear()
+            term.setCursorPos(1,1)
+            print("Your own UID: " .. redcom.get_my_uid())
 
             -- Receive data --
 
@@ -67,7 +75,15 @@ function main()
 
                 if data then
                     print("\nReceived " .. data["protocol"] .. " packet from " .. utils.convertBytesArrayToHexString(data["src"]) .. ":")
-                    print("- Channel used: " .. data["channel"] .. "\n- Msg received: " .. data["content"] .. "\n- Replying channel: " .. data["reply_channel"] .. "\n- With a distance of: " .. data["distance"] .. "\n")
+                    if data["protocol"] == "udp" then
+                        print("- Channel used: " .. data["channel"] .. "\n- Checksum of msg received: " .. redcom.only_CRC32(data["content"]) .. "\n- Replying channel: " .. data["reply_channel"] .. "\n- With a distance of: " .. data["distance"])
+                        data = data["content"]
+                        print("- Data: " .. data:sub(1,8) .. " ... " .. data:sub(1020,1030) .. " ... " .. data:sub(#data-8,#data) .. '\n')
+                    elseif data["protocol"] == "tcp" then
+                        print("- Channel used: " .. data["channel"] .. "\n- Checksum of msg received: " .. redcom.only_CRC32(data["content"]) .. "\n- Replying channel: " .. data["reply_channel"])
+                        data = data["content"]
+                        print("- Data: " .. data:sub(1,8) .. " ... " .. data:sub(1020,1030) .. " ... " .. data:sub(#data-8,#data) .. '\n')
+                    end
                 end
             end
         elseif choice == "udp_send" then
@@ -79,7 +95,7 @@ function main()
             while true do
                 -- Send data --
                 print("\n\nEnter the channel to use: ")
-                local channel = read()
+                local channel = tonumber(read())
 
                 print("\nEnter the data to be sent: ")
                 local data = read()
@@ -90,30 +106,42 @@ function main()
                 redcom.open(channel)
                 redcom.send_udp(channel, recipient, data, nil, nil)
 
-                print("Data sent me boi!\n")
+                print("\nUDP packet sent.")
+                print("Data: " .. data:sub(1,8) .. " ... " .. data:sub(#data/2,#data/2+10) .. " ... " .. data:sub(#data-8,#data))
+                print("CRC Checksum of out data: " .. redcom.only_CRC32(data))
             end
         elseif choice == "tcp_send" then
             term.clear()
             term.setCursorPos(1,1)
 
-            --print("Your own UID: " .. redcom.get_my_uid())
-            --
-            --while true do
-            --    -- Send data --
-            --    print("\n\nEnter the data to be sent: ")
-            --    local data = read()
-            --
-            --    print("\nEnter the recipient UID: ")
-            --    local recipient = read()
-            --
-            --    redcom.send_tcp(135, recipient, data, nil, nil)
-            --
-            --    print("Data sent me boi!\n")
-            --end
+            print("Your own UID: " .. redcom.get_my_uid())
+
+            while true do
+                -- Send data --
+                print("\n\nEnter the data to be sent (leave empty for 100kb random data): ")
+                local data = read()
+
+                if #data == 0 then
+                    for _ = 1, 100000 do
+                        data = data .. string.char(math.random(97, 122))
+                    end
+                end
+
+                print("\nEnter the recipient UID: ")
+                local recipient = read() -- "C1BC2EB462D0E9A1" --read()
+
+                local start = os.clock()
+                redcom.send_tcp(135, recipient, data, true, nil, true)
+
+                print("\nTCP connection correctly sent data and terminated itself.")
+                print("Data: " .. data:sub(1,8) .. " ... " .. data:sub(#data/2,#data/2+10) .. " ... " .. data:sub(#data-8,#data))
+                print("CRC Checksum of out data: " .. redcom.only_CRC32(data))
+                print("Data length is " .. string.len(data) .. " bytes and took " .. os.clock() - start .. " seconds to send.")
+            end
 
             term.setTextColor(colors.red)
 
-            print("TCP protocol is not supported yet, wait for the next commit.")
+            --print("TCP protocol is not supported yet, wait for the next commit.")
         elseif choice == "crc" then
             math.randomseed(os.time())
 

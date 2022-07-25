@@ -1,11 +1,12 @@
-if not stalinkRoot then
-  local mainPathHandler = fs.open("/mainPath.dat", "r")
-  stalinkRoot = mainPathHandler.readLine()
-  mainPathHandler.close()
+-- Load stalink installation path
+if not StalinkInstallationPath then
+  local StalinkInstallationPathFile = fs.open("/stalink-path", "r")
+  StalinkInstallationPath = StalinkInstallationPathFile.readLine()
+  StalinkInstallationPathFile.close()
 end
 
-if not stalinkRoot then
-  error("Cannot read mainPath file")
+if not StalinkInstallationPath then
+  error("Cannot read stalink-path file")
 end
 
-os.loadAPI(stalinkRoot .. "turtle/quarry_mining/auto_quarry.lua")
+os.loadAPI(StalinkInstallationPath .. "turtle/quarry_mining/auto_quarry.lua")
