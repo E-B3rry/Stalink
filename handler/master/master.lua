@@ -1,15 +1,17 @@
 --- Load APIs ---
 
 -- Load stalink installation path
-if not StalinkInstallationPath then
-  local StalinkInstallationPathFile = fs.open("/stalink-path", "r")
-  StalinkInstallationPath = StalinkInstallationPathFile.readLine()
-  StalinkInstallationPathFile.close()
-end
+--if not StalinkInstallationPath then
+--  local StalinkInstallationPathFile = fs.open("/stalink-path", "r")
+--  StalinkInstallationPath = StalinkInstallationPathFile.readLine()
+--  StalinkInstallationPathFile.close()
+--end
+StalinkInstallationPath = "Stalink/"
 
 os.loadAPI(StalinkInstallationPath .. "turtle/utilities/mining/path_system.lua")
 os.loadAPI(StalinkInstallationPath .. "turtle/quarry_mining/quarry_mining.lua")
-os.loadAPI(StalinkInstallationPath .. "handler/utilities/requestUtils.lua")
+--Doesnt work yet
+os.loadAPI(StalinkInstallationPath .. "utilities/requestUtils.lua")
 os.loadAPI(StalinkInstallationPath .. "redcom/redcom.lua")
 
 
@@ -33,7 +35,7 @@ end
 redcom.open(10)
 
 while true do
-  c, rc, data, d = redcom.receiveRaw()
+  c, rc, data, d = redcom.receiveRaw(true)
   writeF(data)
   Ask(data, rc)
 end

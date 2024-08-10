@@ -12,6 +12,10 @@
 -- Fix global variable declarations in modQ division and verify() (no security concerns)
 -- Small tweaks from SquidDev's illuaminate (https://github.com/SquidDev/illuaminate/)
 
+function Hello()
+  print("Hello from ecc")
+end
+
 local byteTableMT = {
     __tostring = function(a) return string.char(unpack(a)) end,
     __index = {

@@ -72,18 +72,18 @@
 os.unloadAPI("rednet")
 
 -- Load stalink installation path
-if not StalinkInstallationPath then
-    local StalinkInstallationPathFile = fs.open("/stalink-path", "r")
-    StalinkInstallationPath = StalinkInstallationPathFile.readLine()
-    StalinkInstallationPathFile.close()
-end
+--if not StalinkInstallationPath then
+--    local StalinkInstallationPathFile = fs.open("/stalink-path", "r")
+--    StalinkInstallationPath = StalinkInstallationPathFile.readLine()
+--    StalinkInstallationPathFile.close()
+--end
+StalinkInstallationPath = "Stalink/"
 
 os.loadAPI(StalinkInstallationPath .. "utilities/ecc.lua")
 os.loadAPI(StalinkInstallationPath .. "utilities/utils.lua")
 
 -- Define constants
 local __USABLE_RANGE__ = {0, 65532}
-
 
 -- Set local variables (Reworking)
 local ids_table = {}
@@ -171,9 +171,8 @@ end
 
 -- Return the uid of this device in a readable format
 function get_my_uid()
-    return utils.convertBytesArrayToHexString(ids_table["self"])
+    return requestUtils.convertBytesArrayToHexString(ids_table["self"])
 end
-
 
 -- Data loading and saving
 function load_data()
@@ -216,7 +215,7 @@ end
 
 
 function save_data()
-    local file = fs.open(A .. "redcom/IDs.dat", "w")
+    local file = fs.open("Stalink/redcom/IDs.dat", "w")
     file.write(textutils.serialize(ids_table))
     file.close()
 end
@@ -472,6 +471,12 @@ end
 
 
 -- Receive function
+function reveiveRaw()
+  
+  return 0, 0, 0, 0
+end
+
+
 function receive(blocking)
     -- TODO: Clean TCP connections when their finished signal is fetch from the queue
 
