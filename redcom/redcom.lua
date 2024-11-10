@@ -470,16 +470,17 @@ function process_packets(limit)
 end
 
 
--- Receive function
-function reveiveRaw()
-  
-  return 0, 0, 0, 0
+-- Receive functions
+-- PORT 1878 : Date of birth of Stalin
+function receiveRaw(modem)
+-- TODO EVERYTHING 
+  local id, msg = rednet.receive()
+  return id, msg, 0, 0
 end
 
 
 function receive(blocking)
     -- TODO: Clean TCP connections when their finished signal is fetch from the queue
-
     if isRunning then coroutine.yield() end
 
     if type(blocking) ~= "boolean" then blocking = true end  -- Ensure blocking parameter is a boolean
@@ -1036,9 +1037,7 @@ end
 
 function open(channels, side)
     local notSpecifiedSide = false
-
     -- TODO: Implement a protocol parameter for channel opening (tcp, udp or both)
-
     if side then
         local t = peripheral.getType(side)
         if t == nil then
@@ -1053,7 +1052,6 @@ function open(channels, side)
     else
         side = getOpenableModemSide()
         notSpecifiedSide = true
-
         if not side then
           error("There aren't any modem connected to the computer that can open channel.", 2)
         end
@@ -1068,7 +1066,6 @@ function open(channels, side)
                 if #(redComSides[side]) > 127 then
                     if notSpecifiedSide then
                         side = getOpenableModemSide()
-
                         if not side then
                             error("Couldn't open all channels because there aren't any modems connected to the computer that can open channel anymore. (All the modems have 128 channels in use)", 3)
                         end
@@ -1076,7 +1073,6 @@ function open(channels, side)
                         error("Couldn't open all channels because " .. side .. " modem cannot open another channel (128 already in use).", 3)
                     end
                 end
-
                 peripheral.call(side, "open", channel)
                 redComSides[side].insert(channel)
             end

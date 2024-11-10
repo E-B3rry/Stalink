@@ -45,10 +45,11 @@ end
 
 -- Master Stalin --
 redcom.open(10)
+--rednet.open("back")
 local screen = peripheral.find("monitor")
 screen.clear()
 while true do
-	c, rc, data, d = redcom.receiveRaw(true) -- Receive data from somewhere
+	c, rc, data, d = redcom.receive(true) -- Receive data from somewhere
 	WriteF(data) -- Writes the data to the screen on the left
 	Ask(data, rc)
 	--writeF(0)
